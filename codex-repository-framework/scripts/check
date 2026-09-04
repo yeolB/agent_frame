@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+required_paths=(
+  "AGENTS.md"
+  "ARCHITECTURE.md"
+  "agents/coder.md"
+  "agents/reviewer.md"
+  "agents/steward.md"
+  "memory/direction.md"
+  "scripts/memory-map"
+)
+
+for relative_path in "${required_paths[@]}"; do
+  if [[ ! -e "$repo_root/$relative_path" ]]; then
+    echo "Missing required path: $relative_path" >&2
+    exit 1
+  fi
+done
+
+"$repo_root/scripts/memory-map" >/dev/null
+
+# Add project-specific lint, typecheck, test, and build commands below.
+# Keep this script as the single verification entry point for agents.
+
+echo "Framework checks passed. No project-specific checks are configured."
