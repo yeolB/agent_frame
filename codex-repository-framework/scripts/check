@@ -11,10 +11,14 @@ required_paths=(
   ".codex/agents/reviewer.toml"
   ".codex/agents/steward.toml"
   "memory/direction.md"
+  "memory/domains/_README.md"
+  "memory/domains/_index-template.md"
   "state/README.md"
   "state/_task-template.md"
   "state/active"
   "scripts/context-map"
+  "templates/local-AGENTS.md"
+  "templates/local-ARCHITECTURE.md"
 )
 
 for relative_path in "${required_paths[@]}"; do

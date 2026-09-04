@@ -26,12 +26,17 @@
 ├── memory/
 │   ├── direction.md
 │   ├── domains/
-│   │   └── _template.md
+│   │   ├── _README.md
+│   │   ├── _template.md
+│   │   └── _index-template.md
 │   └── decisions/
 │       └── _template.md
-└── scripts/
-    ├── check
-    └── context-map
+├── scripts/
+│   ├── check
+│   └── context-map
+└── templates/
+    ├── local-AGENTS.md
+    └── local-ARCHITECTURE.md
 ```
 
 ## 적용하기
@@ -90,6 +95,25 @@ Root는 하위 에이전트에 프로젝트 전체 context를 복사하지 않�
 
 프레임은 특정 모델이나 reasoning effort를 고정하지 않습니다. 에이전트는 적용하는 환경의 설정을 상속하므로 프로젝트별 필요가 확인됐을 때만 TOML에 모델 설정을 추가합니다.
 
+## 계층형 structure routing
+
+작은 프로젝트는 루트 `ARCHITECTURE.md`와 domain당 한 파일로 시작합니다. 루트 문서가 특정 subtree 내부를 간결하게 안내하지 못할 때만 detail을 가장 가까운 로컬 `ARCHITECTURE.md`로 승격합니다.
+
+```text
+ARCHITECTURE.md
+  └─ services/payments/ARCHITECTURE.md
+       └─ memory/domains/payments/index.md
+            ├─ boundaries.md
+            └─ flows/refunds.md
+```
+
+- 루트 Architecture는 전체 path, owner, local-map 링크만 유지합니다.
+- 로컬 Architecture는 해당 subtree의 현재 module map과 public entry point만 설명합니다.
+- Domain `index.md`는 semantic ownership을 요약하고 필요한 세부 context로 routing합니다.
+- 상세 문서를 전부 읽지 않고 현재 작업에 관련된 경로만 따라갑니다.
+
+`templates/local-ARCHITECTURE.md`는 실제로 계층화가 필요해졌을 때만 복사합니다.
+
 ## 모듈형 초기 설계
 
 새 프로젝트나 주요 subsystem은 파일부터 생성하지 않습니다.
@@ -124,7 +148,22 @@ Coder는 milestone, 범위·접근 변경, 중요한 발견, 검증 상태 변�
 - `domains/`: 코드만으로 불명확한 ownership과 boundary
 - `decisions/`: 반복해서 뒤집힐 위험이 있는 결정의 이유
 
-모든 폴더나 기능에 domain 문서를 만들지 않습니다. ownership 혼동, boundary 위반, 반복 재조사가 실제로 발생하는 영역부터 추가합니다.
+모든 폴더나 기능에 domain 문서를 만들지 않습니다. ownership 혼동, boundary 위반, 반복 재조사가 실제로 발생하는 영역부터 추가합니다. 전체 lifecycle은 `memory/domains/_README.md`에 있습니다.
+
+Domain memory는 다음 순서로 관리합니다.
+
+1. 한 개의 `<domain>.md`로 시작합니다.
+2. 서로 다른 작업이 불필요한 detail을 함께 읽어야 할 때만 `<domain>/index.md`와 focused file로 분할합니다.
+3. 의미 있는 독립 boundary가 없거나 항상 함께 읽는 domain은 합칩니다.
+4. 코드와 Architecture만으로 충분히 명확해지면 제거합니다.
+
+파일 길이 자체는 분할 이유가 아닙니다. 독립적인 작업이 독립적인 context를 필요로 하는지가 기준입니다.
+
+## 하위 AGENTS.md
+
+하위 `AGENTS.md`는 subtree에 별도 명령, 운영 제약, 반복되는 로컬 오류가 있을 때만 만듭니다. 루트 내용을 복사하지 않고 local addition 또는 명시적인 override만 둡니다. Domain 설명은 넣지 않고 Architecture나 domain memory로 연결합니다.
+
+Codex는 프로젝트 루트에서 현재 작업 디렉터리까지의 지침을 합치므로, Root는 변경 대상 경로의 하위 지침을 먼저 확인합니다. 템플릿은 `templates/local-AGENTS.md`에 있습니다. 자세한 탐색·우선순위 동작은 [공식 OpenAI 문서](https://learn.chatgpt.com/docs/agent-configuration/agents-md)를 참고하세요.
 
 ## 프로젝트별 초기화
 
@@ -133,5 +172,6 @@ Coder는 milestone, 범위·접근 변경, 중요한 발견, 검증 상태 변�
 3. 필요한 domain부터 `memory/domains/_template.md`를 복사해 작성합니다.
 4. `scripts/check`에 실제 lint, typecheck, test, build 명령을 연결합니다.
 5. 새 코드베이스라면 Root가 Steward → Coder → Reviewer 순서로 초기 module 구조를 구축하게 합니다.
+6. 루트 routing이 부족해질 때만 local Architecture, domain index, 하위 AGENTS를 추가합니다.
 
 generated dashboard, health registry, 복잡한 metadata schema, 자동 memory build pipeline은 반복되는 실제 문제가 생기기 전에는 추가하지 않습니다.

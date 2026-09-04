@@ -27,7 +27,7 @@ print_markdown_map() {
 
     printf '  %-40s %s\n' "$relative_path" "— $heading"
     found=1
-  done < <(find "$content_root" -type f -name '*.md' -print0 | sort -z)
+  done < <(find "$content_root" -type f -name '*.md' ! -name '_*.md' -print0 | sort -z)
 
   if [[ "$found" -eq 0 ]]; then
     echo "  (none)"

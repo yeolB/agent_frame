@@ -17,7 +17,9 @@ For an existing project:
 - document current reality before proposing a target,
 - find recurring ownership confusion, misplaced behavior, deep dependency chains, and local exceptions becoming precedent,
 - distinguish preferred patterns from tolerated legacy patterns,
-- add or split domain memory only when it reduces repeated reasoning,
+- create, split, merge, or remove domain memory according to memory/domains/_README.md,
+- promote root architecture detail to a linked local ARCHITECTURE.md only when the root can no longer route that subtree concisely,
+- create nested AGENTS.md only for distinct local commands, constraints, or repeated mistakes; never copy root instructions,
 - update ARCHITECTURE.md only to match the repository that actually exists.
 
 When a problem repeats, prefer improving code placement, names, boundaries, or routing before adding more governance. Remove obsolete guidance and do not create automation until repeated manual cost justifies it.

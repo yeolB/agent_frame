@@ -35,14 +35,15 @@ Discover available context broadly, but load it locally.
 
 Use:
 
-- `ARCHITECTURE.md` to locate current code, modules, and ownership.
+- `ARCHITECTURE.md` to locate current code, modules, ownership, and any linked local architecture map.
+- A linked local `ARCHITECTURE.md` only when the root map is insufficient for the target subtree.
 - `./scripts/context-map` to discover durable memory and active work without loading it all.
 - `state/active/<task>.md` for the current checkpoint of substantial ongoing work.
-- `memory/domains/<domain>.md` for durable ownership and boundary knowledge.
+- `memory/domains/<domain>.md` or `memory/domains/<domain>/index.md` for durable ownership and boundary knowledge.
 - `memory/decisions/<decision>.md` only when relevant rationale is needed.
 - `memory/direction.md` when comparing valid approaches or evaluating long-term direction.
 
-Expand context only when the task crosses a boundary or local information is insufficient. Files named `_template.md` are scaffolding, not project knowledge.
+Expand context only when the task crosses a boundary or local information is insufficient. Markdown files whose names begin with `_` are framework guidance or scaffolding, not project knowledge.
 
 ## Role routing
 
@@ -74,6 +75,7 @@ Do not hide user requirements behind a rewritten task. Do not prescribe an imple
 
 - `state/` is volatile and describes work happening now.
 - `memory/` is durable and contains knowledge likely to help future tasks.
+- Domain memory exists only while it reduces repeated ownership or boundary reasoning; split, merge, or remove it as described in `memory/domains/_README.md`.
 - `ARCHITECTURE.md` describes current structural reality, not an aspirational target.
 - Git history is the chronological record; active-state files are current snapshots, not diaries.
 - External issue trackers remain the source of truth for backlog and scheduling when present.
@@ -81,6 +83,8 @@ Do not hide user requirements behind a rewritten task. Do not prescribe an imple
 ## Local instructions
 
 Before working in a subtree, check for applicable `AGENTS.md` or `AGENTS.override.md` files between the repository root and the target location. Nested files contain only local additions or explicit overrides; they do not copy this file.
+
+Create a nested instruction file only when the subtree has distinct commands, operational constraints, or repeated local mistakes that the root cannot express concisely. Keep domain explanations in architecture or domain memory. Start from `templates/local-AGENTS.md`.
 
 ## Completion
 

@@ -1,6 +1,8 @@
 # Domain Name
 
-<!-- Copy this file to a descriptive name such as billing.md, then remove instructional comments. -->
+<!--
+Read _README.md first. Copy this file to a descriptive name such as billing.md only when durable ownership or boundary knowledge reduces repeated reasoning. Remove instructional comments.
+-->
 
 ## Owns
 

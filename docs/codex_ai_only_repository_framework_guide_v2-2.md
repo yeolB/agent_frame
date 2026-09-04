@@ -86,12 +86,17 @@ repo/
 ├── memory/
 │   ├── direction.md
 │   ├── domains/
-│   │   └── _template.md
+│   │   ├── _README.md
+│   │   ├── _template.md
+│   │   └── _index-template.md
 │   └── decisions/
 │       └── _template.md
 ├── scripts/
 │   ├── check
 │   └── context-map
+├── templates/
+│   ├── local-AGENTS.md
+│   └── local-ARCHITECTURE.md
 └── <actual project code>
 ```
 
@@ -245,6 +250,18 @@ Architecture 문서는 현재 존재하는 repository와 module 구조를 설명
 
 아직 구현되지 않은 목표 구조는 Architecture의 현재 사실처럼 기록하지 않는다.
 
+작은 프로젝트는 루트 Architecture 하나로 시작한다. 특정 subtree의 내부 구조 때문에 루트 문서가 간결한 routing map 역할을 할 수 없을 때만 detail을 가장 가까운 local Architecture로 승격한다.
+
+```text
+ARCHITECTURE.md
+  └─ services/payments/ARCHITECTURE.md
+       └─ memory/domains/payments/index.md
+            ├─ boundaries.md
+            └─ flows/refunds.md
+```
+
+루트 문서는 subtree의 owner와 local-map 링크만 유지한다. Local Architecture는 해당 subtree의 현재 module map, public entry point, dependency direction, transitional area만 설명하고 루트 내용을 복사하지 않는다.
+
 ## 15. memory/direction.md — 장기 판단 기준
 
 Direction은 특정 기능 설명이 아니라 두 구현이 모두 동작할 때 선택할 기준이다.
@@ -269,20 +286,58 @@ Domain memory는 모든 디렉터리의 설명서가 아니다. 코드만으로 
 - 어떤 패턴이 preferred, tolerated, local exception인가?
 - 현재 상태에서 어느 방향으로 이동하는가?
 
+### Domain memory lifecycle
+
+Domain memory는 다음 조건 중 하나가 있을 때만 만든다.
+
+- ownership이 코드와 Architecture만으로 명확하지 않다.
+- behavior가 반복해서 잘못된 module에 배치된다.
+- 다른 module이 internal boundary를 위반하기 쉽다.
+- 같은 invariant 또는 exception이 반복해서 재발견된다.
+- preferred pattern과 tolerated legacy를 구분해야 한다.
+
+Source directory, package, data type, CRUD 기능은 자동으로 domain이 아니다.
+
+처음에는 `memory/domains/<domain>.md` 한 파일로 시작한다. 서로 다른 작업이 관련 없는 detail을 함께 읽어야 할 때만 다음과 같이 승격한다.
+
+```text
+memory/domains/payments/
+├── index.md
+├── boundaries.md
+└── flows/
+    └── refunds.md
+```
+
+`index.md`는 ownership과 public boundary를 짧게 유지하고 세부 context로 routing한다. 파일 길이 자체는 분할 근거가 아니며, 독립적인 작업에 독립적인 context가 필요한지가 기준이다.
+
+같은 owner를 설명하거나 의미 있는 독립 boundary가 없거나 항상 함께 읽는 domain은 합친다. Code와 Architecture만으로 내용이 충분히 명확해지거나 더 이상 판단을 바꾸지 않는 domain memory는 제거한다. 필요한 결정 이유만 decision 문서로 옮기고 Git history에 이전 내용을 맡긴다.
+
+Domain memory가 두 번째 architecture wiki가 되거나 구현 detail과 계속 동기화해야 한다면 범위를 줄이거나 제거한다.
+
 ## 17. memory/decisions/ — 필요한 이유만 보존
 
 Decision 문서는 코드만으로 이유를 복구하기 어렵고 미래 agent가 쉽게 뒤집어 반복 문제를 만들 수 있는 결정에만 사용한다. 일반 구현 세부사항과 작업 진행은 기록하지 않는다.
 
-## 18. context-map — 읽기 전에 발견하기
+## 18. 하위 AGENTS.md — 필요한 local delta만 적용
+
+하위 `AGENTS.md` 또는 `AGENTS.override.md`는 subtree에 별도 command, operational constraint, review rule, 반복되는 local mistake가 있을 때만 만든다.
+
+하위 파일은 루트 `AGENTS.md`를 복사하지 않는다. Scope, local constraint, local verification, 명시적 override와 이유만 기록한다. Domain 설명이나 architecture detail은 넣지 않고 해당 local Architecture 또는 domain memory로 연결한다.
+
+Codex는 프로젝트 루트에서 현재 working directory까지의 지침을 결합하고 더 가까운 파일을 나중에 적용한다. Root에서 시작한 agent는 변경 대상 경로의 local instruction을 명시적으로 확인해야 한다. Local template은 `templates/local-AGENTS.md`에 둔다.
+
+- https://learn.chatgpt.com/docs/agent-configuration/agents-md
+
+## 19. context-map — 읽기 전에 발견하기
 
 `./scripts/context-map`은 다음을 deterministic하게 보여준다.
 
 - `memory/**/*.md`의 경로와 첫 H1
 - `state/active/*.md`의 경로와 첫 H1
 
-AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인한 뒤 필요한 파일만 선택해서 읽게 한다.
+이름이 `_`로 시작하는 framework guidance와 template은 결과에서 제외한다. AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인한 뒤 필요한 파일만 선택해서 읽게 한다.
 
-## 19. 일반 작업 시나리오
+## 20. 일반 작업 시나리오
 
 ```text
 1. Root가 AGENTS.md의 decision kernel 적용
@@ -297,7 +352,7 @@ AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인
 10. active state 정리 및 필요한 durable memory만 반영
 ```
 
-## 20. 새 프로젝트 도입
+## 21. 새 프로젝트 도입
 
 1. 프레임 내용을 프로젝트 루트에 복사한다.
 2. Root가 Steward에게 최소 module 및 ownership 제안을 요청한다.
@@ -307,15 +362,16 @@ AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인
 6. Reviewer가 boundary와 dependency shape을 검토한다.
 7. 실제 ownership 혼동이 생길 때만 domain memory를 추가한다.
 
-## 21. 기존 프로젝트 도입
+## 22. 기존 프로젝트 도입
 
 1. 재설계 전에 현재 path, entry point, module, dependency를 조사한다.
 2. `ARCHITECTURE.md`에 현재 현실과 transitional area를 기록한다.
 3. 반복적으로 혼동되는 owner부터 domain memory를 만든다.
 4. 현재 흔하지만 확장하면 안 되는 패턴을 tolerated 또는 local exception으로 표시한다.
 5. 대규모 migration 대신 이후 작업에서 작은 방향성 개선을 누적한다.
+6. 루트 routing이 부족해질 때만 local Architecture, domain index, 하위 AGENTS를 추가한다.
 
-## 22. 만들지 않는 것
+## 23. 만들지 않는 것
 
 초기에는 다음을 만들지 않는다.
 
@@ -329,7 +385,7 @@ AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인
 
 반복되는 실제 비용이 확인될 때만 추가한다.
 
-## 23. 최종 원칙
+## 24. 최종 원칙
 
 1. Root는 공통 의사결정과 최초 context 전파를 소유한다.
 2. 역할별 실행 지침은 공식 custom-agent TOML에 둔다.
@@ -341,3 +397,5 @@ AI 요약이나 중요도 판단은 하지 않는다. 무엇이 있는지 확인
 8. Reviewer는 문제를 독립적으로 재구성한다.
 9. Steward는 문서가 아니라 미래 repository를 개선한다.
 10. Governance는 해결하는 문제보다 복잡해지면 안 된다.
+11. Domain memory와 local instructions는 반복 판단 비용을 줄이는 동안만 유지한다.
+12. 복잡성은 필요가 증명될 때 root map에서 local map으로 한 단계씩 승격한다.

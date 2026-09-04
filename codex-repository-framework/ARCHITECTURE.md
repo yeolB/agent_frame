@@ -1,6 +1,6 @@
 # Architecture
 
-This document is a routing map of the repository's current structure and module boundaries. Keep it concise. Describe present reality here and keep proposed structures in active task state until code makes them real. Put durable intended movement in `memory/direction.md` or the relevant domain memory.
+This document is the top-level routing map of the repository's current structure and module boundaries. Keep it concise. Describe present reality here and keep proposed structures in active task state until code makes them real. Put durable intended movement in `memory/direction.md` or the relevant domain memory.
 
 ## Repository and Module Map
 
@@ -12,11 +12,26 @@ Owns example-domain behavior.
 Public entry point: src/example/index.*
 See: memory/domains/example.md
 
+services/payments/
+Payment application and provider integration.
+Local map: services/payments/ARCHITECTURE.md
+Domain context: memory/domains/payments/index.md
+
 src/http/
 Transport only. Does not own business behavior.
 -->
 
 Document the major paths, cohesive modules, their ownership, and their public entry points. Do not inventory every file.
+
+## Detailed Architecture Routes
+
+<!--
+When one subtree has enough internal structure that this document can no longer route a task concisely, replace that detail with one link to a local ARCHITECTURE.md near the subtree.
+
+The local file describes only its current internal module map, public entry points, dependency direction, and transitional areas. It does not copy this root map. Start from templates/local-ARCHITECTURE.md.
+-->
+
+No local architecture maps are required yet.
 
 ## Dependency Direction
 
