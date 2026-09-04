@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+print_markdown_map() {
+  local label="$1"
+  local content_root="$2"
+  local found=0
+
+  echo "$label/"
+
+  if [[ ! -d "$content_root" ]]; then
+    echo "  (missing)"
+    return
+  fi
+
+  while IFS= read -r -d '' file; do
+    local relative_path="${file#"$content_root/"}"
+    local heading
+    heading="$(awk '/^#[[:space:]]+/ { sub(/^#[[:space:]]+/, ""); print; exit }' "$file")"
+
+    if [[ -z "$heading" ]]; then
+      heading="(missing H1)"
+    fi
+
+    printf '  %-40s %s\n' "$relative_path" "— $heading"
+    found=1
+  done < <(find "$content_root" -type f -name '*.md' -print0 | sort -z)
+
+  if [[ "$found" -eq 0 ]]; then
+    echo "  (none)"
+  fi
+}
+
+print_markdown_map "memory" "$repo_root/memory"
+echo
+print_markdown_map "state/active" "$repo_root/state/active"

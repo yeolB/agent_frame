@@ -12,7 +12,9 @@
 
 - locality over abstraction,
 - ownership over convenience,
+- cohesive modules with explicit public boundaries,
 - explicit dependencies over hidden coupling,
+- visible dependency direction over cycles,
 - concrete implementations over speculative frameworks,
 - small changes over broad migrations.
 
@@ -20,8 +22,9 @@
 
 - cross-domain internal model access,
 - shared abstractions without proven consumers,
+- generic shared modules and dumping grounds,
+- module cycles and hidden cross-module access,
 - deep forwarding chains,
-- ambiguous dumping grounds,
 - extending known legacy patterns.
 
 ## Decision rule

@@ -1,47 +1,87 @@
 # Repository Instructions
 
-## Decision order
+## Purpose
 
-Before a non-trivial implementation:
+This file is the repository-wide decision kernel and the first context-propagation node. It defines shared judgment, context routing, and orchestration. Role-specific execution belongs in `.codex/agents/*.toml`.
 
-1. Identify the owning domain.
-2. Identify the correct layer and location.
-3. Determine the minimum context needed.
-4. Read only the relevant project memory.
-5. Choose the smallest coherent change.
-6. Identify explicit non-goals.
+## Decision kernel
 
-Existing code is not automatically precedent. Some patterns may be legacy code or local exceptions.
+For non-trivial work:
 
-## Context discipline
+1. Restate the observable outcome requested by the user.
+2. Identify current structural reality and the likely owner.
+3. Determine the minimum context required to verify that ownership.
+4. Separate current facts from intended direction.
+5. Choose the smallest coherent action and explicit non-goals.
+6. Select the appropriate role and execution sequence.
+7. Verify the result in proportion to its risk.
+8. Preserve only state and knowledge that future work needs.
 
-Start from the task and the current code location. Do not load repository-wide context by default.
+Existing code is not automatically precedent. Documented legacy patterns and local exceptions are constraints, not patterns to expand.
+
+## Repository design principles
+
+- Organize behavior around clear ownership.
+- Prefer cohesive modules with explicit public boundaries.
+- Keep module internals private and dependency direction visible.
+- Avoid dependency cycles and generic dumping grounds.
+- Prefer the fewest modules that provide meaningful isolation.
+- Do not turn modularity into speculative layers, frameworks, or microservices.
+- Optimize for local reasoning and a small context surface per change.
+
+## Context routing
+
+Discover available context broadly, but load it locally.
 
 Use:
 
-- `ARCHITECTURE.md` to understand repository structure and locate ownership.
-- `./scripts/memory-map` to discover available memory without loading it all.
-- `memory/domains/<domain>.md` for the affected domain.
-- `memory/work/<task>.md` only when continuing an existing long-running task.
-- `memory/decisions/<decision>.md` only when a relevant decision needs explanation.
-- `memory/direction.md` when choosing between valid approaches or evaluating repository direction.
+- `ARCHITECTURE.md` to locate current code, modules, and ownership.
+- `./scripts/context-map` to discover durable memory and active work without loading it all.
+- `state/active/<task>.md` for the current checkpoint of substantial ongoing work.
+- `memory/domains/<domain>.md` for durable ownership and boundary knowledge.
+- `memory/decisions/<decision>.md` only when relevant rationale is needed.
+- `memory/direction.md` when comparing valid approaches or evaluating long-term direction.
 
 Expand context only when the task crosses a boundary or local information is insufficient. Files named `_template.md` are scaffolding, not project knowledge.
 
-## Roles
+## Role routing
 
-- Implementation: `agents/coder.md`
-- Independent review: `agents/reviewer.md`
-- Repository stewardship: `agents/steward.md`
+Project-scoped custom agents are defined in `.codex/agents/`:
 
-Load a role file only when performing that role.
+- `coder`: implementation, fixes, refactoring, scaffolding, and code generation
+- `reviewer`: independent review after implementation
+- `steward`: repository bootstrap, structural analysis, and durable-memory maintenance
 
-## Verification
+For a new project or major subsystem, use `steward` to establish a minimal ownership and module proposal before `coder` implements it. For other non-trivial implementation, use `coder` directly. Use `reviewer` after implementation, not concurrently with overlapping writes.
 
-Run:
+Parallelize only independent work with disjoint write scopes. Prefer parallel agents for read-heavy exploration, testing analysis, and review. The main agent owns sequencing, integration, and the final response.
 
-```bash
-./scripts/check
-```
+## Task propagation
 
-Also run any narrower checks relevant to the changed area when the project provides them.
+When delegating, send a focused task packet containing:
+
+- the original task and observable outcome,
+- an ownership hypothesis that the receiving agent must verify,
+- relevant context pointers rather than copied repository-wide context,
+- constraints and explicit non-goals,
+- the active-state path when one is required,
+- verification expectations,
+- the result or summary expected back.
+
+Do not hide user requirements behind a rewritten task. Do not prescribe an implementation before the responsible agent verifies local reality.
+
+## State and memory lifecycle
+
+- `state/` is volatile and describes work happening now.
+- `memory/` is durable and contains knowledge likely to help future tasks.
+- `ARCHITECTURE.md` describes current structural reality, not an aspirational target.
+- Git history is the chronological record; active-state files are current snapshots, not diaries.
+- External issue trackers remain the source of truth for backlog and scheduling when present.
+
+## Local instructions
+
+Before working in a subtree, check for applicable `AGENTS.md` or `AGENTS.override.md` files between the repository root and the target location. Nested files contain only local additions or explicit overrides; they do not copy this file.
+
+## Completion
+
+The main agent integrates delegated results, confirms required verification, ensures active state is current or removed, and reports remaining uncertainty. Do not mark work complete while required agent work or verification is still pending.

@@ -7,11 +7,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 required_paths=(
   "AGENTS.md"
   "ARCHITECTURE.md"
-  "agents/coder.md"
-  "agents/reviewer.md"
-  "agents/steward.md"
+  ".codex/agents/coder.toml"
+  ".codex/agents/reviewer.toml"
+  ".codex/agents/steward.toml"
   "memory/direction.md"
-  "scripts/memory-map"
+  "state/README.md"
+  "state/_task-template.md"
+  "state/active"
+  "scripts/context-map"
 )
 
 for relative_path in "${required_paths[@]}"; do
@@ -21,7 +24,16 @@ for relative_path in "${required_paths[@]}"; do
   fi
 done
 
-"$repo_root/scripts/memory-map" >/dev/null
+for agent_file in "$repo_root"/.codex/agents/*.toml; do
+  for required_key in name description developer_instructions; do
+    if ! grep -Eq "^${required_key}[[:space:]]*=" "$agent_file"; then
+      echo "Missing required custom-agent key '$required_key': ${agent_file#"$repo_root/"}" >&2
+      exit 1
+    fi
+  done
+done
+
+"$repo_root/scripts/context-map" >/dev/null
 
 # Add project-specific lint, typecheck, test, and build commands below.
 # Keep this script as the single verification entry point for agents.

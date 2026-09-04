@@ -1,21 +1,22 @@
 # Architecture
 
-This document is a routing map of the repository's current structure. Keep it concise. Describe present reality here and put intended movement in `memory/direction.md` or the relevant domain memory.
+This document is a routing map of the repository's current structure and module boundaries. Keep it concise. Describe present reality here and keep proposed structures in active task state until code makes them real. Put durable intended movement in `memory/direction.md` or the relevant domain memory.
 
-## Repository Map
+## Repository and Module Map
 
 <!--
 Replace these examples with real repository paths and ownership.
 
 src/example/
 Owns example-domain behavior.
+Public entry point: src/example/index.*
 See: memory/domains/example.md
 
 src/http/
 Transport only. Does not own business behavior.
 -->
 
-Document the major paths a contributor needs in order to locate the owner of a task.
+Document the major paths, cohesive modules, their ownership, and their public entry points. Do not inventory every file.
 
 ## Dependency Direction
 
@@ -31,9 +32,12 @@ infrastructure
 
 Document only rules that are true and useful in the current repository.
 
-## Boundaries
+## Module Boundaries
 
-<!-- Identify important ownership or dependency boundaries between areas. -->
+<!--
+Identify important ownership and dependency boundaries between modules.
+State which interactions are public and which internal models must not cross a boundary.
+-->
 
 No project-specific boundaries have been recorded yet.
 
