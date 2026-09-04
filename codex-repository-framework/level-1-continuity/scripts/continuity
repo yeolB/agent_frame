@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""Deterministic cadence and memory-index maintenance for repository continuity."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parent.parent
+STATE_PATH = ROOT / "state" / "cadence.json"
+CURRENT_PATH = ROOT / "state" / "CURRENT.md"
+ACTIVE_ROOT = ROOT / "state" / "active"
+MEMORY_ROOT = ROOT / "memory"
+RECORDS_ROOT = MEMORY_ROOT / "records"
+INDEX_PATH = MEMORY_ROOT / "INDEX.md"
+
+DEFAULT_STATE: dict[str, Any] = {
+    "version": 1,
+    "memory_every_changed_sessions": 3,
+    "review_every_memory_runs": 5,
+    "changed_sessions_since_memory": 0,
+    "memory_runs_since_review": 0,
+    "last_state_hash": None,
+    "last_memory_at": None,
+    "last_memory_commit": None,
+    "last_review_at": None,
+    "last_review_commit": None,
+}
+
+ALLOWED_TYPES = {"decision", "lesson", "failure", "constraint", "assumption", "finding"}
+ALLOWED_STATUSES = {"active", "disputed", "superseded", "archived"}
+REQUIRED_FIELDS = {
+    "ID",
+    "Type",
+    "Status",
+    "Scope",
+    "Authority",
+    "Trigger",
+    "Summary",
+    "Last validated",
+}
+ID_PATTERN = re.compile(r"^MEM-(\d{4,})$")
+FILE_PATTERN = re.compile(r"^(MEM-\d{4,})(?:-[a-z0-9][a-z0-9-]*)?\.md$")
+FIELD_PATTERN = re.compile(r"^([A-Za-z][A-Za-z ]+):\s*(.+?)\s*$")
+INDEX_LINK_PATTERN = re.compile(r"\[(MEM-\d{4,})\]\(records/([^)]+\.md)\)")
+
+
+class ContinuityError(RuntimeError):
+    pass
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def git_head() -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def load_state() -> dict[str, Any]:
+    if not STATE_PATH.exists():
+        return dict(DEFAULT_STATE)
+    try:
+        loaded = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContinuityError(f"Cannot read {STATE_PATH.relative_to(ROOT)}: {error}") from error
+    state = dict(DEFAULT_STATE)
+    state.update(loaded)
+    validate_state(state)
+    return state
+
+
+def validate_state(state: dict[str, Any]) -> None:
+    if state.get("version") != 1:
+        raise ContinuityError("Unsupported cadence state version")
+    for key in (
+        "memory_every_changed_sessions",
+        "review_every_memory_runs",
+        "changed_sessions_since_memory",
+        "memory_runs_since_review",
+    ):
+        value = state.get(key)
+        if not isinstance(value, int) or value < 0:
+            raise ContinuityError(f"{key} must be a non-negative integer")
+    if state["memory_every_changed_sessions"] == 0 or state["review_every_memory_runs"] == 0:
+        raise ContinuityError("Cadence thresholds must be greater than zero")
+
+
+def save_state(state: dict[str, Any]) -> None:
+    validate_state(state)
+    atomic_write(STATE_PATH, json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+
+
+def active_files() -> list[Path]:
+    if not ACTIVE_ROOT.exists():
+        return []
+    return sorted(
+        path
+        for path in ACTIVE_ROOT.rglob("*.md")
+        if path.is_file() and not path.name.startswith("_")
+    )
+
+
+def state_digest() -> tuple[str, bool]:
+    files = [CURRENT_PATH, *active_files()]
+    digest = hashlib.sha256()
+    for path in files:
+        relative = path.relative_to(ROOT).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if path.exists():
+            digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest(), bool(files[1:])
+
+
+def due_flags(state: dict[str, Any]) -> tuple[bool, bool]:
+    memory_due = state["changed_sessions_since_memory"] >= state["memory_every_changed_sessions"]
+    review_due = state["memory_runs_since_review"] >= state["review_every_memory_runs"]
+    return memory_due, review_due
+
+
+def status_lines(state: dict[str, Any]) -> list[str]:
+    memory_due, review_due = due_flags(state)
+    return [
+        f"Changed sessions since memory maintenance: {state['changed_sessions_since_memory']}/{state['memory_every_changed_sessions']}",
+        f"Memory runs since independent review: {state['memory_runs_since_review']}/{state['review_every_memory_runs']}",
+        f"Memory maintenance due: {'yes' if memory_due else 'no'}",
+        f"Independent review due: {'yes' if review_due else 'no'}",
+    ]
+
+
+def read_hook_input() -> None:
+    if not sys.stdin.isatty():
+        sys.stdin.read()
+
+
+def command_session_start(_: argparse.Namespace) -> int:
+    read_hook_input()
+    state = load_state()
+    memory_due, review_due = due_flags(state)
+    messages: list[str] = []
+    if memory_due:
+        messages.append(
+            "Repository memory maintenance is due. Invoke $maintain-project-memory before substantial new work."
+        )
+    if review_due:
+        messages.append(
+            "Independent drift review is due. After any due memory maintenance, spawn one fresh read-only "
+            "drift_reviewer, wait for its report, integrate accepted corrections, and run "
+            "./scripts/continuity review-complete."
+        )
+    if messages:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n".join(messages),
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False))
+    return 0
+
+
+def command_session_end(_: argparse.Namespace) -> int:
+    read_hook_input()
+    state = load_state()
+    digest, has_active_work = state_digest()
+    if has_active_work and digest != state.get("last_state_hash"):
+        state["changed_sessions_since_memory"] += 1
+    state["last_state_hash"] = digest
+    save_state(state)
+    return 0
+
+
+def parse_record(path: Path) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = FIELD_PATTERN.match(line)
+        if match:
+            fields[match.group(1)] = match.group(2)
+        if line.startswith("## "):
+            break
+    missing = REQUIRED_FIELDS - fields.keys()
+    if missing:
+        raise ContinuityError(f"{path.relative_to(ROOT)} is missing fields: {', '.join(sorted(missing))}")
+    match = FILE_PATTERN.match(path.name)
+    if not match:
+        raise ContinuityError(f"Invalid memory filename: {path.name}")
+    if fields["ID"] != match.group(1) or not ID_PATTERN.match(fields["ID"]):
+        raise ContinuityError(f"Memory ID does not match filename: {path.name}")
+    if fields["Type"] not in ALLOWED_TYPES:
+        raise ContinuityError(f"Invalid memory type in {path.name}: {fields['Type']}")
+    if fields["Status"] not in ALLOWED_STATUSES:
+        raise ContinuityError(f"Invalid memory status in {path.name}: {fields['Status']}")
+    fields["filename"] = path.name
+    return fields
+
+
+def load_records() -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    if not RECORDS_ROOT.exists():
+        return records
+    for path in sorted(RECORDS_ROOT.glob("*.md")):
+        if path.name.startswith("_"):
+            continue
+        record = parse_record(path)
+        if record["ID"] in seen_ids:
+            raise ContinuityError(f"Duplicate memory ID: {record['ID']}")
+        seen_ids.add(record["ID"])
+        records.append(record)
+    return records
+
+
+def memory_number(record_id: str) -> int:
+    match = ID_PATTERN.match(record_id)
+    if not match:
+        raise ContinuityError(f"Invalid memory ID: {record_id}")
+    return int(match.group(1))
+
+
+def escape_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ").strip()
+
+
+def render_index(records: list[dict[str, str]]) -> str:
+    lines = [
+        "# Memory Index",
+        "",
+        "> Generated by `./scripts/continuity index`. Do not edit this table manually. Archived records are omitted.",
+        "",
+        "| ID | Type | Scope | Status | Load when | Summary |",
+        "|---|---|---|---|---|---|",
+    ]
+    for record in sorted(records, key=lambda item: memory_number(item["ID"])):
+        if record["Status"] == "archived":
+            continue
+        linked_id = f"[{record['ID']}](records/{record['filename']})"
+        lines.append(
+            "| "
+            + " | ".join(
+                escape_cell(value)
+                for value in (
+                    linked_id,
+                    record["Type"],
+                    record["Scope"],
+                    record["Status"],
+                    record["Trigger"],
+                    record["Summary"],
+                )
+            )
+            + " |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def rebuild_index() -> list[dict[str, str]]:
+    records = load_records()
+    atomic_write(INDEX_PATH, render_index(records))
+    return records
+
+
+def validate_index(records: list[dict[str, str]]) -> None:
+    if not INDEX_PATH.exists():
+        raise ContinuityError("memory/INDEX.md is missing")
+    content = INDEX_PATH.read_text(encoding="utf-8")
+    links = INDEX_LINK_PATTERN.findall(content)
+    linked = {record_id: filename for record_id, filename in links}
+    expected = {
+        record["ID"]: record["filename"]
+        for record in records
+        if record["Status"] != "archived"
+    }
+    if linked != expected:
+        raise ContinuityError("memory/INDEX.md is stale; run ./scripts/continuity index")
+    for filename in linked.values():
+        if not (RECORDS_ROOT / filename).is_file():
+            raise ContinuityError(f"Broken memory index link: records/{filename}")
+
+
+def command_status(args: argparse.Namespace) -> int:
+    state = load_state()
+    if args.json:
+        memory_due, review_due = due_flags(state)
+        print(json.dumps({**state, "memory_due": memory_due, "review_due": review_due}, indent=2))
+    else:
+        print("\n".join(status_lines(state)))
+    return 0
+
+
+def command_next_id(_: argparse.Namespace) -> int:
+    records = load_records()
+    next_number = max((memory_number(record["ID"]) for record in records), default=0) + 1
+    print(f"MEM-{next_number:04d}")
+    return 0
+
+
+def command_index(_: argparse.Namespace) -> int:
+    records = rebuild_index()
+    validate_index(records)
+    print(f"Indexed {len(records)} memory record(s).")
+    return 0
+
+
+def command_validate(_: argparse.Namespace) -> int:
+    state = load_state()
+    validate_state(state)
+    records = load_records()
+    validate_index(records)
+    if not CURRENT_PATH.is_file():
+        raise ContinuityError("state/CURRENT.md is missing")
+    print("Continuity state and memory index are valid.")
+    return 0
+
+
+def command_memory_complete(_: argparse.Namespace) -> int:
+    records = rebuild_index()
+    validate_index(records)
+    state = load_state()
+    state["changed_sessions_since_memory"] = 0
+    state["memory_runs_since_review"] += 1
+    state["last_memory_at"] = now_iso()
+    state["last_memory_commit"] = git_head()
+    save_state(state)
+    print("Memory maintenance recorded.")
+    print("\n".join(status_lines(state)))
+    return 0
+
+
+def command_review_complete(_: argparse.Namespace) -> int:
+    state = load_state()
+    state["memory_runs_since_review"] = 0
+    state["last_review_at"] = now_iso()
+    state["last_review_commit"] = git_head()
+    save_state(state)
+    print("Independent drift review recorded.")
+    print("\n".join(status_lines(state)))
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    status_parser = subparsers.add_parser("status", help="Show cadence and due work")
+    status_parser.add_argument("--json", action="store_true", help="Emit machine-readable status")
+    status_parser.set_defaults(handler=command_status)
+
+    for name, help_text, handler in (
+        ("session-start", "Emit SessionStart hook context when work is due", command_session_start),
+        ("session-end", "Count a session when continuity state changed", command_session_end),
+        ("next-id", "Print the next available memory record ID", command_next_id),
+        ("index", "Regenerate memory/INDEX.md from records", command_index),
+        ("validate", "Validate cadence state and memory records", command_validate),
+        ("memory-complete", "Record completed memory maintenance", command_memory_complete),
+        ("review-complete", "Record completed independent review", command_review_complete),
+    ):
+        subparser = subparsers.add_parser(name, help=help_text)
+        subparser.set_defaults(handler=handler)
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        return args.handler(args)
+    except ContinuityError as error:
+        print(f"continuity: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

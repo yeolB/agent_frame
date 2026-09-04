@@ -8,8 +8,8 @@ When a task touches an area with a demonstrated placement or ownership problem:
 
 1. Read root `ARCHITECTURE.md` to locate the current owner and public entry point.
 2. Read a linked local `ARCHITECTURE.md` only when root routing is insufficient.
-3. Read the relevant `memory/domains/<domain>.md` only when code and architecture do not explain the boundary.
-4. Read a decision record only when its rationale changes the current choice.
+3. Use `memory/INDEX.md` to find structural records whose scope and trigger match the task.
+4. Read a structural record only when its rationale or constraint changes the current choice.
 
 Load local context on demand. Do not read every domain document before each task.
 
@@ -25,6 +25,6 @@ The main agent owns sequencing and integration. Parallelize read-only investigat
 
 Create a nested `AGENTS.md` only for distinct local commands, operational constraints, or repeated local mistakes. It contains local additions or explicit overrides and does not copy root instructions.
 
-## Architecture memory lifecycle
+## Architecture knowledge lifecycle
 
-`ARCHITECTURE.md` describes current structural reality. Domain memory exists only while it prevents repeated ownership or boundary reasoning. Prefer improving code placement, names, and public interfaces before adding governance.
+`ARCHITECTURE.md` describes current structural reality. Durable structural knowledge uses the same Level 1 `memory/records/MEM-*` format; do not create a second architecture-memory hierarchy. Prefer improving code placement, names, and public interfaces before adding governance.

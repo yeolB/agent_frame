@@ -2,85 +2,71 @@
 
 ## Purpose
 
-This repository uses a small continuity system so long-running experimental work can continue across Codex sessions without losing the real goal, the current hypothesis, or lessons from prior experiments.
+Preserve continuity across Codex sessions without turning the repository into a deep agent hierarchy. The root agent is the single starting and integration node. It may delegate focused implementation or independent review, but delegated agents do not create further agents.
 
-The default problem to solve is goal drift, not repository governance. Do not add architecture documents, ownership systems, local instruction trees, or new agent roles unless a repeated, observed failure justifies Level 2.
+The default problem is loss of goal, current state, and learned constraints. Add architecture governance only after repeated structural failures justify Level 2.
 
-## Required context order
+## Start here
 
 Before substantial work:
 
 1. Read `GOAL.md` completely.
-2. Read the relevant `state/active/<task>.md`. Create it from `_template.md` if this is a new multi-session line of work.
-3. Read the relevant entries in `memory/experiments.md`.
-4. Inspect only the code, data, and results needed for the current step.
+2. Read `state/CURRENT.md`.
+3. Read `memory/INDEX.md`.
+4. Read the active-state file named by `state/CURRENT.md`, if any.
+5. Load only memory records whose trigger and scope match the task.
+6. Inspect only the code, evidence, and results needed for the current work.
 
-Do not begin from the latest metric or the latest idea. Reconstruct why the work exists from `GOAL.md` first.
+Do not begin from the latest idea or metric. Reconstruct why the work exists and where it currently stands.
 
 ## Goal ownership
 
-`GOAL.md` is user-owned policy. Never edit it unless the user explicitly asks to change it. If evidence suggests a goal, success criterion, guardrail, stopping condition, or core hypothesis should change, record the proposal in active state and ask the user to decide.
+`GOAL.md` is user-owned policy. Never edit it unless the user explicitly asks. If evidence suggests changing the objective, success criteria, guardrails, non-goals, stopping conditions, direction, or fixed assumptions, record the proposal in active state and ask the user to decide.
 
-Treat proxy metrics as evidence, not as replacements for the stated objective.
+Treat local metrics and intermediate deliverables as evidence, not replacements for the stated outcome.
 
-## Work loop
+## Ordinary work
 
-For each meaningful experiment or implementation step:
+- Choose the smallest coherent action that advances the stated outcome.
+- When creating code, use the fewest cohesive modules with explicit inputs and outputs. Do not add layers for hypothetical future needs.
+- Keep `state/CURRENT.md` short and point it to the primary active task.
+- Keep `state/active/<task>.md` as a current handoff snapshot, not an activity diary.
+- Update current and active state after meaningful milestones, decisions, evidence changes, scope changes, and before handoff.
+- Put possible durable knowledge under `Memory Candidates` in active state. Do not write every observation directly into durable memory.
+- Do not rely on chat history as the only record of work that must survive a session.
 
-1. State the outcome and the exact `GOAL.md` criterion it serves.
-2. State the current hypothesis and what result would weaken or falsify it.
-3. Choose the smallest experiment that can change the decision.
-4. Implement or run it. When creating code, use the fewest cohesive modules with explicit inputs and outputs; do not build layers for hypothetical future needs.
-5. Record the result, interpretation, decision, and next action in active state.
-6. Add an experiment-memory entry only when the lesson should prevent future repetition or materially changes the direction.
+The main agent may implement directly or assign a focused worker. The main agent owns context selection, integration, state accuracy, and completion.
 
-The main agent may perform the implementation directly or assign a focused coder task. A coder is an execution role, not a persistent process. The main agent remains responsible for context, integration, state accuracy, and completion.
+## Memory cadence
 
-## Active-state discipline
+Project hooks use `scripts/continuity` to count sessions in which current or active state actually changed. They do not call a model.
 
-`state/active/<task>.md` is the cross-session handoff. Keep it as a current snapshot, not a chronological activity log.
+When a hook reports that memory maintenance is due, invoke `$maintain-project-memory` before substantial new work. The skill curates durable records and finishes by running:
 
-Update it when:
+```bash
+./scripts/continuity memory-complete
+```
 
-- the experiment is defined,
-- implementation or setup reaches a meaningful checkpoint,
-- a run produces evidence,
-- interpretation, decision, or next action changes,
-- scope changes,
-- work pauses or hands off.
+Memory maintenance may also be run early after a costly discovery, important decision, repeated failure, or final handoff.
 
-Keep outcome, goal connection, current hypothesis, latest evidence, interpretation, decision, next experiment, do-not-repeat constraints, and verification accurate. Do not rely on chat history as the only record.
+## Independent drift review
 
-## Experiment memory
+An independent review is due after the configured number of completed memory-maintenance passes. Check with:
 
-`memory/experiments.md` is a decision ledger, not a raw run log. Preserve the chain:
+```bash
+./scripts/continuity status
+```
 
-`hypothesis -> experiment -> result -> interpretation -> decision -> next action`
+When review is due, create one fresh `drift_reviewer` subagent and wait for its report. Give it the original outcome and paths to `GOAL.md`, `state/CURRENT.md`, relevant active state, `memory/INDEX.md`, relevant records, and primary evidence. Do not preload it with the implementer's conclusions. When the interface supports controlling inherited history, use the least inherited conversation context available.
 
-Record rejected approaches and their conditions precisely enough to recognize disguised repetition. Include material assumptions such as dataset, split, costs, constraints, and metric definitions when they affect the conclusion.
+The reviewer is read-only, does not edit memory, and does not create other agents. The main agent evaluates its report, applies accepted memory changes through `$maintain-project-memory` when needed, and then records completion:
 
-## Drift review
+```bash
+./scripts/continuity review-complete
+```
 
-Run a drift review after every five completed experiments by default, and earlier when any of these occurs:
-
-- a proxy metric becomes the de facto target,
-- scope or complexity expands because results are disappointing,
-- the same family of approach is being retried with cosmetic changes,
-- the next experiment cannot be connected to a `GOAL.md` success criterion,
-- the goal or stopping conditions appear to need revision.
-
-When subagents are available, assign the review to a fresh read-only agent that did not implement the experiments. Give it `GOAL.md`, the active-state file, relevant ledger entries, and result evidence. It must answer:
-
-1. Is the work improving the actual goal rather than a proxy?
-2. Is a failed approach being repeated under a new form?
-3. Has scope or complexity expanded without evidence?
-4. Are stopping conditions being respected?
-5. What is the smallest decision-changing next experiment?
-
-The reviewer reports findings and does not edit files. If no independent agent is available, perform the same review as a separate pass and label it in active state.
-
-After each completed experiment, increment the counters in the active file's `Drift Review` section. After a review, record the experiment count reviewed, relevant ledger entries, findings, decision, and next review point. This checkpoint, rather than chat history, determines when the next periodic review is due.
+Run review early when the goal appears to require change, durable memories conflict, scope expands without evidence, or a rejected direction is repeatedly retried.
 
 ## Completion
 
-Before stopping, ensure active state is sufficient for a new session to continue without chat history. When a line of work closes, move only durable, decision-relevant lessons into `memory/experiments.md`, then remove its active-state file. Git remains the detailed chronological record.
+Before stopping substantial work, make `state/CURRENT.md` and the active-state file sufficient for a new session to continue without chat history. Close or remove completed active-state files after durable knowledge has been curated. Git remains the detailed chronological record.

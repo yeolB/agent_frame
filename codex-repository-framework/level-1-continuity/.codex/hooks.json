@@ -1,0 +1,30 @@
+{
+  "description": "Track continuity cadence without model calls and surface due maintenance at session start.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/continuity\" session-start",
+            "timeout": 3,
+            "additionalContextLimit": 1000,
+            "statusMessage": "Checking repository continuity"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/continuity\" session-end",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -20,4 +20,4 @@ Applies to: `<subtree-path>`
 
 ## Context Route
 
-- Local architecture or domain memory: TODO
+- Local architecture or relevant `memory/INDEX.md` trigger: TODO

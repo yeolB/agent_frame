@@ -20,9 +20,9 @@
 
 - TODO
 
-## Do Not Optimize
+## Non-Goals and Invalid Shortcuts
 
-<!-- Name tempting proxy targets and invalid shortcuts. -->
+<!-- Name tempting proxy targets, excluded scope, and invalid shortcuts. -->
 
 - TODO
 
@@ -32,14 +32,14 @@
 
 - TODO
 
-## Current Core Hypothesis
+## Current Direction
 
-<!-- This may change only through an explicit user decision. Put proposed changes in active state first. -->
+<!-- State the current strategy or governing assumption. Proposed changes go into active state for user decision. -->
 
 - TODO
 
-## Fixed Evaluation Assumptions
+## Fixed Assumptions
 
-<!-- Record assumptions that make results comparable: dataset/split, costs, latency, constraints, baseline, and metric definitions. -->
+<!-- Record assumptions that must remain stable for work to stay comparable and coherent. -->
 
 - TODO
