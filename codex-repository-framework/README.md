@@ -2,7 +2,7 @@
 
 이 번들은 긴 작업을 여러 Codex 세션으로 나눠도 목표, 현재 판단 지점, 검증 근거, 이미 배운 제약이 끊기지 않게 합니다. 특정 연구 절차를 강제하지 않고 어떤 프로젝트에도 같은 정보 구조를 사용합니다.
 
-기본값은 Level 1입니다. 구조 문제가 실제로 반복될 때만 Level 2를 추가합니다.
+운영 가능한 프레임은 Level 1 하나입니다. 이전 architecture extension은 `archive/`에 보존하지만 설치하거나 agent context로 사용하지 않습니다.
 
 ## Level 1 — Continuity
 
@@ -121,13 +121,13 @@ Reviewer는 read-only이며 수정이나 추가 agent 생성을 하지 않습니
 
 목표 변경이 필요해 보이거나 memory 충돌, 반복 실패, 근거 없는 복잡성 증가가 나타나면 카운터와 무관하게 일찍 검토할 수 있습니다.
 
-## Level 2 — Architecture
+## Archive 경계
 
-다음 문제가 반복될 때만 [Level 2](./level-2-architecture/)를 검토합니다.
+[`archive/`](./archive/)는 이전의 architecture governance, Coder, Steward, Architecture Reviewer 설계를 기록으로만 보존합니다. 다음 원칙을 적용합니다.
 
-- 동작을 계속 잘못된 module이나 layer에 구현한다.
-- ownership 또는 public boundary를 반복해서 재조사한다.
-- dependency direction이나 local operational constraint가 반복해서 깨진다.
-- 복잡한 subtree에서 필요한 코드와 지침을 지속적으로 찾지 못한다.
+- 대상 프로젝트에 복사하거나 병합하지 않습니다.
+- Root가 archive의 agent를 호출하지 않습니다.
+- 일반 작업 중 archive 문서를 context로 읽지 않습니다.
+- 사용자가 과거 설계를 명시적으로 요청할 때만 참고합니다.
 
-Level 2는 `ARCHITECTURE.md`, Steward, architecture-aware Coder/Reviewer, 필요한 위치의 local `AGENTS.md`를 선택적으로 추가합니다. 구조 지식도 Level 1 memory record를 사용하므로 두 번째 memory 체계를 만들지 않습니다.
+향후 구조 문제가 생기더라도 archive를 자동으로 활성화하지 않습니다. 현재 Level 1 안에서 문제를 다루고, 별도 구조가 정말 필요하면 사용자가 새 설계를 결정합니다.

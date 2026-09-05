@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Preserve continuity across Codex sessions without turning the repository into a deep agent hierarchy. The root agent is the single starting and integration node. It may delegate focused implementation or independent review, but delegated agents do not create further agents.
+Preserve continuity across Codex sessions without turning the repository into a deep agent hierarchy. The root agent is the single starting, working, and integration node. It performs ordinary work directly. The only default subagent is a fresh read-only reviewer when independent drift review is due.
 
-The default problem is loss of goal, current state, and learned constraints. Add architecture governance only after repeated structural failures justify Level 2.
+The problem is loss of goal, current state, and learned constraints. Content under `archive/`, if present, is historical material rather than active instruction. Do not load or apply it unless the user explicitly asks.
 
 ## Start here
 
@@ -35,7 +35,7 @@ Treat local metrics and intermediate deliverables as evidence, not replacements 
 - Put possible durable knowledge under `Memory Candidates` in active state. Do not write every observation directly into durable memory.
 - Do not rely on chat history as the only record of work that must survive a session.
 
-The main agent may implement directly or assign a focused worker. The main agent owns context selection, integration, state accuracy, and completion.
+The main agent performs implementation and investigation directly and owns context selection, integration, state accuracy, and completion. Do not create an implementation subagent merely because one is available.
 
 ## Memory cadence
 

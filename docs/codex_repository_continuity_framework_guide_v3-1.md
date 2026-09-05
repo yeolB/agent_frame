@@ -37,17 +37,14 @@ Root agent는 최초 전파와 최종 통합 노드다. 시작할 때 여러 문
 
 Agent를 여러 mode로 자동 전환하는 복잡한 장치를 두지 않는다. 비-LLM 코드가 변경된 작업 세션을 세고, 짧은 주기로 memory maintenance를, 더 긴 주기로 independent review를 알린다.
 
-### 실제 실패에 따라 성장
+### 단일 운영 프레임
 
 ```text
-Level 1 — Continuity
+Continuity
 goal + current + active state + memory + cadence + drift review
-              |
-              | 구조 실패가 반복될 때만
-              v
-Level 2 — Architecture
-architecture map + focused roles + local instructions
 ```
+
+운영 레벨은 하나다. 이전 architecture extension은 역사적 archive로만 보존하며, 문제가 생겨도 자동으로 활성화하거나 승격하지 않는다.
 
 ## 3. Level 1 구조
 
@@ -88,9 +85,9 @@ Root `AGENTS.md`는 모든 에이전트의 상세 판단을 담는 문서가 아
 6. 현재 snapshot과 memory candidate를 갱신한다.
 7. due 신호가 있을 때만 maintenance나 review를 실행한다.
 
-구현 전용 세부 규칙은 Level 2의 `coder.toml`에 둔다. Root에는 새 코드를 만들 때 cohesive module, 명시적 input/output, 가정적 layer 금지라는 최소 원칙만 둔다.
+Root에는 새 코드를 만들 때 cohesive module, 명시적 input/output, 가정적 layer 금지라는 최소 원칙만 둔다. 별도의 Coder agent를 기본 실행 경로에 넣지 않는다.
 
-Root가 focused worker나 reviewer를 만들 수는 있지만 delegated agent가 다시 agent tree를 확장하지 않게 한다. 시작과 통합 경로가 깊어지는 것을 막기 위해서다.
+Root가 ordinary implementation과 investigation을 직접 수행한다. 별도 agent는 장기 cadence가 요구하는 fresh read-only drift reviewer 하나만 기본 경로에 있으며, reviewer는 다른 agent를 만들지 않는다.
 
 ## 5. GOAL.md
 
@@ -237,24 +234,16 @@ SessionStart hook: due 여부만 계산
 
 이는 role을 자동 순환시키는 상태기계가 아니다. Ordinary work는 ordinary work로 남고, script는 유지보수가 필요한 시점을 알리는 역할만 한다.
 
-## 12. Level 2 기준
+## 12. Archive 경계
 
-다음 실패가 반복될 때만 architecture extension을 추가한다.
+이전의 Level 2 architecture extension은 `codex-repository-framework/archive/`에 frozen, non-operational 상태로 보존한다. 현재 프레임은 다음을 하지 않는다.
 
-- behavior가 계속 잘못된 module 또는 layer에 배치된다.
-- ownership과 public boundary를 작업마다 재조사한다.
-- dependency cycle이나 내부 model 누출이 반복된다.
-- 큰 subtree에서 필요한 local command나 constraint를 계속 놓친다.
+- archive overlay를 대상 프로젝트에 복사하거나 병합
+- archived Coder, Steward, Architecture Reviewer 호출
+- archive 문서를 일반 작업 context로 load
+- 구조 문제가 생겼다는 이유로 Level 2를 자동 활성화
 
-Level 2는 다음을 선택적으로 제공한다.
-
-- 현재 구조를 routing하는 `ARCHITECTURE.md`
-- 반복 구조 문제를 조사하는 `steward`
-- 모듈형 구현 규칙을 가진 `coder`
-- placement와 boundary를 검토하는 `architecture_reviewer`
-- 실제 local constraint가 있는 subtree의 local `AGENTS.md`
-
-별도의 domain memory는 만들지 않는다. 구조 관련 decision, constraint, finding도 Level 1의 `MEM-*` 형식을 사용한다. `ARCHITECTURE.md`는 현재 구조를, memory record는 구조 선택의 durable reason과 재검토 조건을 담당한다.
+구조 관련 문제도 먼저 현재 Root가 코드와 범용 memory 안에서 직접 다룬다. 별도 구조 체계가 정말 필요하면 사용자가 새 설계를 명시적으로 결정해야 한다. Archive는 과거 판단을 검토하라는 요청이 있을 때만 참고 자료로 연다.
 
 ## 13. 적용과 운영
 
@@ -276,7 +265,7 @@ cp state/active/_template.md state/active/<task>.md
 
 Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json` 사용을 요청할 때 내용을 검토하고 신뢰한다. Team repository에서는 hook과 script 변경도 code review 대상으로 둔다.
 
-Level 2는 반복 문제가 확인된 뒤 extension README에 따라 overlay를 병합한다.
+`archive/`는 설치 대상에서 제외한다.
 
 ## 14. 공식 Codex 구조와의 대응
 
@@ -287,7 +276,7 @@ Level 2는 반복 문제가 확인된 뒤 extension README에 따라 overlay를 
 - Custom reviewer role: [subagent configuration](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 - 저비용 session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
 
-Custom agent의 상세 역할은 `.toml`에 두고 root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
+활성 custom agent는 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
 
 ## 15. 핵심 판단
 
@@ -298,4 +287,4 @@ Custom agent의 상세 역할은 `.toml`에 두고 root `AGENTS.md`에는 호출
 
 횟수 계산, due 판정, index 생성, schema validation은 단순 코드가 담당한다. 그 결과 자동화 비용을 낮추면서도 memory를 단순 append-only note보다 신뢰할 수 있게 유지한다.
 
-프레임의 목표는 정보를 많이 쌓는 것이 아니다. 다음 세션이 얕은 경로로 올바른 목표와 판단 지점에 도달하고, 오래된 지식은 정기적으로 검증되며, 실제 문제가 생기기 전에는 architecture governance를 추가하지 않는 것이다.
+프레임의 목표는 정보를 많이 쌓는 것이 아니다. 다음 세션이 얕은 경로로 올바른 목표와 판단 지점에 도달하고, 오래된 지식은 정기적으로 검증되며, 별도의 agent hierarchy 없이 메인 Codex가 작업을 계속하는 것이다.
