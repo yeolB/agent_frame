@@ -6,14 +6,14 @@
 
 ## 빠른 적용
 
-새 프로젝트 또는 기존 프로젝트의 루트에 Level 1의 내용을 복사합니다.
+새 프로젝트와 기존 프로젝트 모두 non-destructive installer를 사용합니다. 기존 root `AGENTS.md`에는 marker로 구분된 continuity block만 병합하고, 다른 내용은 보존합니다.
 
 ```bash
-cp -R /path/to/agent_frame/codex-repository-framework/level-1-continuity/. .
-chmod +x scripts/continuity
+./codex-repository-framework/install-continuity /path/to/target-project --dry-run
+./codex-repository-framework/install-continuity /path/to/target-project
 ```
 
-복사 후 사용자가 `GOAL.md`를 작성하고 `state/active/_template.md`에서 첫 작업 상태를 만듭니다. Codex는 명시적인 사용자 요청 없이 `GOAL.md`를 변경하지 않습니다.
+Installer는 기존 파일을 덮어쓰지 않고 hooks만 구조적으로 병합합니다. 기본 32 KiB instruction budget을 넘는 프로젝트는 쓰기 전에 중단합니다. 적용 후 사용자가 `GOAL.md`를 작성하고 `state/active/_template.md`에서 첫 작업 상태를 만듭니다.
 
 적용과 운영 방법은 [프레임워크 README](./codex-repository-framework/README.md), 현재 설계는 [v3.1 가이드](./docs/codex_repository_continuity_framework_guide_v3-1.md)를 참고하세요. [DOCX](./codex_repository_continuity_framework_guide_v3-1.docx)도 함께 제공합니다.
 

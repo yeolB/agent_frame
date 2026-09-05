@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""Safely install or merge the continuity framework into a repository."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+
+FRAMEWORK_ROOT = Path(__file__).resolve().parent
+SOURCE_ROOT = FRAMEWORK_ROOT / "level-1-continuity"
+BEGIN_MARKER = "<!-- BEGIN CODEX CONTINUITY -->"
+END_MARKER = "<!-- END CODEX CONTINUITY -->"
+DEFAULT_AGENT_LIMIT = 32 * 1024
+PRUNED_DIRECTORIES = {".git", ".venv", "node_modules", "vendor", "dist", "build", "archive"}
+
+
+class InstallError(RuntimeError):
+    pass
+
+
+def extract_managed_block() -> str:
+    content = (SOURCE_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    start = content.find(BEGIN_MARKER)
+    end = content.find(END_MARKER)
+    if start < 0 or end < start:
+        raise InstallError("Canonical AGENTS.md is missing continuity markers")
+    return content[start : end + len(END_MARKER)]
+
+
+def merge_managed_block(existing: str, block: str) -> str:
+    start = existing.find(BEGIN_MARKER)
+    end = existing.find(END_MARKER)
+    if (start < 0) != (end < 0):
+        raise InstallError("Root instruction file has an incomplete continuity marker pair")
+    if start >= 0:
+        end += len(END_MARKER)
+        merged = existing[:start].rstrip() + "\n\n" + block + existing[end:]
+    else:
+        merged = existing.rstrip() + "\n\n" + block + "\n"
+    return merged.rstrip() + "\n"
+
+
+def contains_continuity_hook(value: Any) -> bool:
+    return "scripts/continuity" in json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def merge_hooks(existing_bytes: bytes, source_bytes: bytes) -> bytes:
+    try:
+        existing = json.loads(existing_bytes)
+        source = json.loads(source_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise InstallError(f"Cannot merge .codex/hooks.json: {error}") from error
+    if not isinstance(existing, dict) or not isinstance(existing.get("hooks", {}), dict):
+        raise InstallError("Existing .codex/hooks.json must contain an object-valued hooks field")
+    existing_hooks = existing.setdefault("hooks", {})
+    for event, source_groups in source.get("hooks", {}).items():
+        current = existing_hooks.setdefault(event, [])
+        if not isinstance(current, list) or not isinstance(source_groups, list):
+            raise InstallError(f"Hook event {event} must be a list")
+        existing_hooks[event] = [group for group in current if not contains_continuity_hook(group)]
+        existing_hooks[event].extend(source_groups)
+    return (json.dumps(existing, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
+def selected_instruction(directory: Path, planned: dict[Path, bytes]) -> Path | None:
+    for name in ("AGENTS.override.md", "AGENTS.md"):
+        candidate = directory / name
+        if candidate in planned or candidate.is_file():
+            return candidate
+    return None
+
+
+def instruction_chain_report(target: Path, planned: dict[Path, bytes]) -> tuple[int, Path, list[Path]]:
+    directories = {target}
+    for root, names, files in os.walk(target):
+        names[:] = [name for name in names if name not in PRUNED_DIRECTORIES]
+        if "AGENTS.md" in files or "AGENTS.override.md" in files:
+            directories.add(Path(root))
+    for path in planned:
+        if path.name in {"AGENTS.md", "AGENTS.override.md"}:
+            directories.add(path.parent)
+
+    largest_size = 0
+    largest_directory = target
+    largest_chain: list[Path] = []
+    for directory in directories:
+        try:
+            relative = directory.relative_to(target)
+        except ValueError:
+            continue
+        chain: list[Path] = []
+        cursor = target
+        instruction = selected_instruction(cursor, planned)
+        if instruction:
+            chain.append(instruction)
+        for part in relative.parts:
+            cursor /= part
+            instruction = selected_instruction(cursor, planned)
+            if instruction:
+                chain.append(instruction)
+        size = sum(len(planned[path]) if path in planned else path.stat().st_size for path in chain)
+        if size > largest_size:
+            largest_size = size
+            largest_directory = directory
+            largest_chain = chain
+    return largest_size, largest_directory, largest_chain
+
+
+def atomic_write(path: Path, content: bytes, mode: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary_name, mode)
+        os.replace(temporary_name, path)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("target", type=Path, help="Target repository root")
+    parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
+    parser.add_argument(
+        "--instruction-file",
+        choices=("auto", "AGENTS.md", "AGENTS.override.md"),
+        default="auto",
+        help="Root instruction file to merge; auto refuses an existing override",
+    )
+    parser.add_argument("--agent-limit", type=int, default=DEFAULT_AGENT_LIMIT)
+    parser.add_argument("--allow-over-budget", action="store_true")
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    target = args.target.resolve()
+    if not target.is_dir():
+        raise InstallError(f"Target directory does not exist: {target}")
+    if args.agent_limit <= 0:
+        raise InstallError("--agent-limit must be positive")
+
+    override = target / "AGENTS.override.md"
+    if args.instruction_file == "auto" and override.exists():
+        raise InstallError(
+            "Root AGENTS.override.md is active and hides AGENTS.md. Remove the temporary override or rerun "
+            "with --instruction-file AGENTS.override.md after reviewing that choice."
+        )
+    instruction_name = "AGENTS.md" if args.instruction_file == "auto" else args.instruction_file
+    instruction_path = target / instruction_name
+    canonical_agents = (SOURCE_ROOT / "AGENTS.md").read_bytes()
+    if instruction_path.exists():
+        existing = instruction_path.read_text(encoding="utf-8")
+        instruction_bytes = merge_managed_block(existing, extract_managed_block()).encode("utf-8")
+        instruction_mode = instruction_path.stat().st_mode & 0o777
+    else:
+        instruction_bytes = canonical_agents
+        instruction_mode = (SOURCE_ROOT / "AGENTS.md").stat().st_mode & 0o777
+
+    planned: dict[Path, bytes] = {instruction_path: instruction_bytes}
+    modes: dict[Path, int] = {instruction_path: instruction_mode}
+    actions: dict[Path, str] = {instruction_path: "merge instructions" if instruction_path.exists() else "create"}
+    preserved: list[Path] = []
+
+    source_hooks = SOURCE_ROOT / ".codex/hooks.json"
+    target_hooks = target / ".codex/hooks.json"
+    if target_hooks.exists():
+        hook_bytes = merge_hooks(target_hooks.read_bytes(), source_hooks.read_bytes())
+        planned[target_hooks] = hook_bytes
+        modes[target_hooks] = target_hooks.stat().st_mode & 0o777
+        actions[target_hooks] = "merge continuity hooks"
+    else:
+        planned[target_hooks] = source_hooks.read_bytes()
+        modes[target_hooks] = source_hooks.stat().st_mode & 0o777
+        actions[target_hooks] = "create"
+
+    for source in sorted(path for path in SOURCE_ROOT.rglob("*") if path.is_file()):
+        relative = source.relative_to(SOURCE_ROOT)
+        if relative.as_posix() in {"AGENTS.md", ".codex/hooks.json"}:
+            continue
+        destination = target / relative
+        if destination.exists():
+            if destination.read_bytes() != source.read_bytes():
+                preserved.append(destination)
+            continue
+        planned[destination] = source.read_bytes()
+        modes[destination] = source.stat().st_mode & 0o777
+        actions[destination] = "create"
+
+    for path in list(planned):
+        if path.exists() and path.read_bytes() == planned[path]:
+            planned.pop(path)
+            modes.pop(path)
+            actions.pop(path)
+
+    largest_size, largest_directory, largest_chain = instruction_chain_report(target, planned)
+    chain_display = " + ".join(str(path.relative_to(target)) for path in largest_chain) or "none"
+    print(f"Largest project instruction chain: {largest_size}/{args.agent_limit} bytes at {largest_directory}")
+    print(f"Instruction files: {chain_display}")
+    if largest_size > args.agent_limit and not args.allow_over_budget:
+        raise InstallError(
+            "Project instruction chain exceeds the configured budget. Compact AGENTS files or rerun with "
+            "--allow-over-budget only when Codex project_doc_max_bytes is intentionally higher."
+        )
+    if largest_size >= int(args.agent_limit * 0.75):
+        print("WARNING: instruction chain uses at least 75% of the budget; leave room for global guidance.")
+
+    for path, action in sorted(actions.items(), key=lambda item: str(item[0])):
+        print(f"{action}: {path.relative_to(target)}")
+    for path in preserved:
+        print(f"preserve existing, review manually: {path.relative_to(target)}")
+    if args.dry_run:
+        print("Dry run; no files written.")
+        return 0
+
+    for path, content in planned.items():
+        atomic_write(path, content, modes[path])
+    print("Continuity integration complete. Existing non-managed content was preserved.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except InstallError as error:
+        print(f"install-continuity: {error}", file=sys.stderr)
+        raise SystemExit(1)

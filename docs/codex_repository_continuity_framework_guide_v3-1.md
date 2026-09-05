@@ -89,6 +89,31 @@ Root에는 새 코드를 만들 때 cohesive module, 명시적 input/output, 가
 
 Root가 ordinary implementation과 investigation을 직접 수행한다. 별도 agent는 장기 cadence가 요구하는 fresh read-only drift reviewer 하나만 기본 경로에 있으며, reviewer는 다른 agent를 만들지 않는다.
 
+### 기존 AGENTS.md와 병합
+
+프레임의 `AGENTS.md`는 별도 agent가 아니라 project instruction template이다. 기존 프로젝트에서는 continuity marker block만 root instruction에 병합한다.
+
+```text
+기존 project rules + continuity managed block
+                    ↓
+             root AGENTS.md 하나
+```
+
+같은 디렉터리에 두 번째 임의 파일을 만들어도 자동으로 합쳐지지 않는다. 특히 `AGENTS.override.md`가 있으면 그 위치의 `AGENTS.md` 대신 override 하나가 선택되므로 installer는 auto mode에서 중단하고 사용자의 명시적 선택을 요구한다.
+
+### 비대한 AGENTS.md 처리
+
+Codex의 기본 project instruction budget은 root부터 current working directory까지 합쳐 32 KiB다. Root에는 항상 필요한 규칙과 routing만 남긴다.
+
+- 작업 절차는 `.agents/skills`로 이동해 필요할 때만 본문을 load한다.
+- 현재 상태는 `CURRENT`와 active state로 이동한다.
+- 누적 지식은 조건부 memory record로 이동한다.
+- formatting과 기계적 규칙은 formatter, linter, tests, CI로 이동한다.
+- 긴 설명과 예시는 일반 문서에 두고 Skill이나 memory에서 연결한다.
+- subtree 전용 규칙은 짧은 local `AGENTS.md`에 두고 해당 경로에서 Codex를 시작한다.
+
+여러 instruction 파일로 이름만 나누는 것은 해결책이 아니다. 같은 디렉터리에서는 하나만 선택되며, 하위 파일도 해당 working-directory chain에 들어올 때만 적용된다. `install-continuity --dry-run`은 가장 큰 project chain을 계산해 75%에서 경고하고 설정된 한도를 넘으면 변경 전에 중단한다.
+
 ## 5. GOAL.md
 
 `GOAL.md`는 사용자 소유 policy다. Codex는 명시적 요청 없이 수정하지 않는다.
@@ -247,13 +272,14 @@ SessionStart hook: due 여부만 계산
 
 ## 13. 적용과 운영
 
-Level 1 설치:
+새 프로젝트와 기존 프로젝트에 동일한 safe installer를 사용한다.
 
 ```bash
-cp -R /path/to/codex-repository-framework/level-1-continuity/. /path/to/target-project/
-cd /path/to/target-project
-chmod +x scripts/continuity
+/path/to/codex-repository-framework/install-continuity /path/to/target-project --dry-run
+/path/to/codex-repository-framework/install-continuity /path/to/target-project
 ```
+
+Installer는 기존 root instruction의 managed block과 기존 hook JSON만 구조적으로 병합한다. 다른 기존 파일은 덮어쓰지 않는다. Root `AGENTS.override.md`가 활성 상태이면 auto mode가 중단되므로 override의 임시성 여부를 먼저 결정한다.
 
 첫 작업 생성:
 

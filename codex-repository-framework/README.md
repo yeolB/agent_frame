@@ -6,12 +6,26 @@
 
 ## Level 1 — Continuity
 
-대상 프로젝트 루트에 `level-1-continuity/`의 **내용**을 복사합니다.
+새 프로젝트와 기존 프로젝트 모두 installer로 적용합니다.
 
 ```bash
-cp -R /path/to/codex-repository-framework/level-1-continuity/. /path/to/target-project/
-cd /path/to/target-project
-chmod +x scripts/continuity
+/path/to/codex-repository-framework/install-continuity /path/to/target-project --dry-run
+/path/to/codex-repository-framework/install-continuity /path/to/target-project
+```
+
+Installer의 동작은 다음과 같습니다.
+
+- Root instruction이 없으면 canonical `AGENTS.md`를 만듭니다.
+- 기존 `AGENTS.md`가 있으면 `BEGIN/END CODEX CONTINUITY` marker 사이의 작은 block만 추가하거나 갱신합니다.
+- 기존 `.codex/hooks.json`은 다른 hook을 보존하면서 continuity hook만 병합합니다.
+- 그 밖의 기존 파일은 덮어쓰지 않고 manual review 대상으로 출력합니다.
+- 쓰기 전에 project instruction chain의 byte 크기를 검사합니다.
+
+Root에 `AGENTS.override.md`가 있으면 같은 위치의 `AGENTS.md`를 가리므로 auto mode는 중단합니다. 임시 override를 제거하거나, 내용을 검토한 후 다음처럼 적용 대상을 명시합니다.
+
+```bash
+/path/to/codex-repository-framework/install-continuity /path/to/target-project \
+  --instruction-file AGENTS.override.md
 ```
 
 설치되는 구조는 다음과 같습니다.
@@ -52,6 +66,22 @@ cp state/active/_template.md state/active/first-task.md
 ```
 
 Codex가 project hook 사용을 요청하면 파일 내용을 검토한 뒤 신뢰해야 합니다. Hook은 로컬 Python 스크립트만 실행하며 모델을 호출하지 않습니다.
+
+## 기존 AGENTS.md가 큰 경우
+
+Codex는 root부터 현재 작업 디렉터리까지 instruction을 합치며 기본 project instruction 한도는 32 KiB입니다. Installer는 가장 큰 project chain을 계산해 한도를 넘으면 쓰기 전에 중단하고, 75% 이상이면 경고합니다. Global instruction 크기는 이 계산에 포함되지 않으므로 여유를 두는 편이 좋습니다.
+
+큰 `AGENTS.md`를 여러 자동 로드 파일로 단순 분할하지 않습니다. 같은 디렉터리에서는 `AGENTS.override.md` 또는 `AGENTS.md` 중 하나만 선택되기 때문입니다. 대신 다음처럼 줄입니다.
+
+- Root에는 모든 작업에 항상 필요한 금지사항, 핵심 명령, context routing만 둡니다.
+- 배포, migration, 특정 test workflow 같은 절차는 `.agents/skills/<name>/SKILL.md`로 옮깁니다.
+- 현재 진행 상황은 `state/CURRENT.md`와 active state로 옮깁니다.
+- 누적된 교훈과 예외는 trigger가 있는 memory record로 옮깁니다.
+- 설명형 architecture와 긴 예시는 일반 문서에 두고 관련 Skill이나 memory에서 필요할 때만 연결합니다.
+- formatting과 정적 규칙은 가능한 한 formatter, linter, test, CI가 검사하게 합니다.
+- 특정 subtree에만 필요한 짧은 override는 그 subtree의 `AGENTS.md`에 둡니다. 이 지침이 필요하면 Codex를 해당 경로에서 시작합니다.
+
+한도를 의도적으로 높인 프로젝트만 실제 `project_doc_max_bytes` 설정과 일치하도록 `--agent-limit`과 `--allow-over-budget`을 사용합니다.
 
 ## 세션에서 읽는 순서
 
