@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -u
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: continuity-posix <action>" >&2
+    exit 2
+fi
+
+script_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+continuity_script="$script_directory/continuity"
+version_probe='import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'
+
+for command_name in python3 python; do
+    if command -v "$command_name" >/dev/null 2>&1 \
+        && "$command_name" -c "$version_probe" >/dev/null 2>&1; then
+        exec "$command_name" "$continuity_script" "$1"
+    fi
+done
+
+echo "Continuity hooks require Python 3.10 or newer through python3 or python." >&2
+exit 1

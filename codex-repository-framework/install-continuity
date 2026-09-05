@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -18,10 +20,90 @@ BEGIN_MARKER = "<!-- BEGIN CODEX CONTINUITY -->"
 END_MARKER = "<!-- END CODEX CONTINUITY -->"
 DEFAULT_AGENT_LIMIT = 32 * 1024
 PRUNED_DIRECTORIES = {".git", ".venv", "node_modules", "vendor", "dist", "build", "archive"}
+PYTHON_VERSION_PROBE = "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+REQUIRED_RUNTIME_COMMANDS = ("turn-start", "turn-stop", "session-start", "session-end")
+MANAGED_RUNTIME_PATHS = {
+    "scripts/continuity",
+    "scripts/continuity-posix",
+    "scripts/continuity-windows.ps1",
+}
 
 
 class InstallError(RuntimeError):
     pass
+
+
+def git_repository_root(target: Path) -> Path:
+    if shutil.which("git") is None:
+        raise InstallError("Git is required because continuity hooks resolve files from the repository root")
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise InstallError("Timed out while resolving the target Git repository root") from error
+    if result.returncode != 0:
+        raise InstallError("Target must be inside a Git working tree before continuity is installed")
+    return Path(result.stdout.strip()).resolve()
+
+
+def available_python_runtime(candidates: tuple[tuple[str, list[str]], ...]) -> str | None:
+    for display, command in candidates:
+        if shutil.which(command[0]) is None:
+            continue
+        try:
+            result = subprocess.run(
+                [*command, "-c", PYTHON_VERSION_PROBE],
+                check=False,
+                capture_output=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return display
+    return None
+
+
+def platform_preflight(target: Path) -> None:
+    repository_root = git_repository_root(target)
+    if repository_root != target:
+        raise InstallError(
+            f"Target must be the Git repository root, not a subdirectory: {repository_root}"
+        )
+    if os.name == "nt":
+        if shutil.which("powershell.exe") is None:
+            raise InstallError("Windows continuity hooks require Windows PowerShell")
+        candidates = (("py -3", ["py", "-3"]), ("python", ["python"]), ("python3", ["python3"]))
+        runtime = available_python_runtime(candidates)
+        if runtime is None:
+            raise InstallError(
+                "Windows continuity hooks require Python 3.10+ through py -3, python, or python3"
+            )
+        print(f"Windows hook runtime: {runtime} (Python 3.10+)")
+        return
+
+    if shutil.which("sh") is None:
+        raise InstallError("POSIX continuity hooks require sh")
+    candidates = (("python3", ["python3"]), ("python", ["python"]))
+    runtime = available_python_runtime(candidates)
+    if runtime is None:
+        raise InstallError("POSIX continuity hooks require Python 3.10+ through python3 or python")
+    print(f"POSIX hook runtime: {runtime} (Python 3.10+)")
+
+
+def runtime_supports_current_hooks(content: bytes) -> bool:
+    try:
+        source = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return "RUNTIME_API_VERSION = 2" in source or all(
+        f'"{command}"' in source for command in REQUIRED_RUNTIME_COMMANDS
+    )
 
 
 def extract_managed_block() -> str:
@@ -142,6 +224,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--agent-limit", type=int, default=DEFAULT_AGENT_LIMIT)
     parser.add_argument("--allow-over-budget", action="store_true")
+    parser.add_argument(
+        "--replace-runtime",
+        action="store_true",
+        help="Replace incompatible existing continuity runtime files after reviewing local changes",
+    )
     return parser
 
 
@@ -152,6 +239,7 @@ def main() -> int:
         raise InstallError(f"Target directory does not exist: {target}")
     if args.agent_limit <= 0:
         raise InstallError("--agent-limit must be positive")
+    platform_preflight(target)
 
     override = target / "AGENTS.override.md"
     if args.instruction_file == "auto" and override.exists():
@@ -194,11 +282,31 @@ def main() -> int:
         destination = target / relative
         if destination.exists():
             if destination.read_bytes() != source.read_bytes():
+                if relative.as_posix() in MANAGED_RUNTIME_PATHS and args.replace_runtime:
+                    planned[destination] = source.read_bytes()
+                    modes[destination] = destination.stat().st_mode & 0o777
+                    actions[destination] = "replace managed runtime"
+                    continue
+                if relative.as_posix() in MANAGED_RUNTIME_PATHS - {"scripts/continuity"}:
+                    raise InstallError(
+                        f"Existing {relative.as_posix()} conflicts with the managed hook launcher. "
+                        "Review local changes, then rerun with --replace-runtime."
+                    )
                 preserved.append(destination)
             continue
         planned[destination] = source.read_bytes()
         modes[destination] = source.stat().st_mode & 0o777
         actions[destination] = "create"
+
+    target_runtime = target / "scripts/continuity"
+    effective_runtime = planned.get(target_runtime)
+    if effective_runtime is None and target_runtime.exists():
+        effective_runtime = target_runtime.read_bytes()
+    if effective_runtime is not None and not runtime_supports_current_hooks(effective_runtime):
+        raise InstallError(
+            "Existing scripts/continuity is incompatible with current hooks. Review local changes, then "
+            "rerun with --replace-runtime to upgrade it."
+        )
 
     for path in list(planned):
         if path.exists() and path.read_bytes() == planned[path]:

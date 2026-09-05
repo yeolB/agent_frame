@@ -15,6 +15,8 @@
 
 Installer는 기존 파일을 덮어쓰지 않고 `AGENTS.md`의 managed block과 hooks만 구조적으로 병합합니다. 기본 32 KiB instruction budget을 넘는 프로젝트는 쓰기 전에 중단합니다. 적용 직후 Codex에서 `$initialize-project-continuity`를 한 번 실행해 프로젝트 근거와 사용자 결정으로 `GOAL`, `CURRENT`, 첫 active state의 기준을 잡습니다.
 
+Hook은 Linux/macOS와 Windows 명령을 함께 설치합니다. Codex가 운영체제에 맞는 명령을 자동 선택하고, launcher가 Git root와 사용 가능한 Python 3.10+를 찾으므로 프로젝트 절대경로나 분석용 가상환경을 설정할 필요가 없습니다.
+
 적용과 운영 방법은 [프레임워크 README](./codex-repository-framework/README.md), 현재 설계는 [v3.1 가이드](./docs/codex_repository_continuity_framework_guide_v3-1.md)를 참고하세요. [DOCX](./codex_repository_continuity_framework_guide_v3-1.docx)도 함께 제공합니다.
 
 v2.x, v3.0, `codex-repository-framework/archive/`는 설계가 발전한 과정을 보존하는 이전 기록이며 현재 프레임의 설치·실행 대상이 아닙니다.

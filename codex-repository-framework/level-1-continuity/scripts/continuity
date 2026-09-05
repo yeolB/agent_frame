@@ -17,6 +17,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_API_VERSION = 2
 STATE_PATH = ROOT / "state" / "cadence.json"
 CURRENT_PATH = ROOT / "state" / "CURRENT.md"
 ACTIVE_ROOT = ROOT / "state" / "active"

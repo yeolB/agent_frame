@@ -6,7 +6,7 @@
 
 ## Level 1 — Continuity
 
-새 프로젝트와 기존 프로젝트 모두 installer로 적용합니다.
+새 프로젝트와 기존 프로젝트 모두 installer로 적용합니다. 대상 경로는 먼저 초기화된 Git repository의 root여야 하며 Python 3.10+가 필요합니다.
 
 ```bash
 /path/to/codex-repository-framework/install-continuity /path/to/target-project --dry-run
@@ -15,10 +15,11 @@
 
 Installer의 동작은 다음과 같습니다.
 
+- 대상이 Git root인지와 현재 운영체제에서 사용할 수 있는 Python 3.10+ hook runtime을 먼저 검사합니다.
 - Root instruction이 없으면 canonical `AGENTS.md`를 만듭니다.
 - 기존 `AGENTS.md`가 있으면 `BEGIN/END CODEX CONTINUITY` marker 사이의 작은 block만 추가하거나 갱신합니다.
 - 기존 `.codex/hooks.json`은 다른 hook을 보존하면서 continuity hook만 병합합니다.
-- 그 밖의 기존 파일은 덮어쓰지 않고 manual review 대상으로 출력합니다.
+- 그 밖의 기존 파일은 덮어쓰지 않고 manual review 대상으로 출력합니다. 현재 hook API와 호환되지 않거나 launcher와 충돌하는 continuity runtime 파일은 설치를 중단하며, 검토 후 `--replace-runtime`으로만 교체합니다.
 - 쓰기 전에 project instruction chain의 byte 크기를 검사합니다.
 
 Root에 `AGENTS.override.md`가 있으면 같은 위치의 `AGENTS.md`를 가리므로 auto mode는 중단합니다. 임시 override를 제거하거나, 내용을 검토한 후 다음처럼 적용 대상을 명시합니다.
@@ -46,7 +47,10 @@ memory/
 .codex/
 ├── hooks.json                    # 턴 전후와 세션 복구 때 로컬 스크립트 실행
 └── agents/drift-reviewer.toml    # 독립 read-only 장기 검토자
-scripts/continuity                # 카운터, index, validation
+scripts/
+├── continuity                    # 카운터, index, validation
+├── continuity-posix              # Linux/macOS Python launcher
+└── continuity-windows.ps1        # Windows Python launcher
 ```
 
 ### 처음 설정
@@ -80,7 +84,30 @@ cp state/active/_template.md state/active/first-task.md
 ./scripts/continuity status
 ```
 
-Codex가 project hook 사용을 요청하면 파일 내용을 검토한 뒤 신뢰해야 합니다. Hook은 로컬 Python 스크립트만 실행하며 모델을 호출하지 않습니다.
+Codex가 project hook 사용을 요청하면 파일 내용을 검토한 뒤 신뢰해야 합니다. Hook은 bundled OS launcher와 로컬 Python 스크립트만 실행하며 모델을 호출하지 않습니다.
+
+### 운영체제별 자동 실행
+
+`.codex/hooks.json`의 각 handler에는 POSIX용 `command`와 Windows 전용 `commandWindows`가 함께 들어갑니다. Codex가 운영체제에 맞는 필드를 자동 선택합니다.
+
+- Linux/macOS: Git root에서 `scripts/continuity-posix`를 찾고 `python3`, `python` 순서로 Python 3.10+를 선택합니다.
+- Windows: PowerShell이 Git root에서 `scripts/continuity-windows.ps1`을 찾고 `py -3`, `python`, `python3` 순서로 실제 실행 가능한 Python 3.10+를 선택합니다.
+- 둘 다 project absolute path나 project virtual environment를 저장하지 않습니다.
+
+Windows PowerShell에서도 같은 installer를 사용합니다.
+
+```powershell
+py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project --dry-run
+py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project
+```
+
+Git, PowerShell 또는 호환 Python이 없으면 installer가 쓰기 전에 중단합니다. 기존 설치의 runtime이 현재 hook command와 호환되지 않거나 launcher 경로와 충돌하는 경우에는 사용자 수정을 먼저 검토한 뒤에만 다음을 사용합니다.
+
+```powershell
+py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project --replace-runtime
+```
+
+Hook 정의가 새로 설치되거나 바뀌면 `/hooks`에서 내용을 검토하고 다시 신뢰해야 합니다.
 
 ## 기존 AGENTS.md가 큰 경우
 

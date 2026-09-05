@@ -71,7 +71,10 @@ repo/
 ├── .codex/
 │   ├── hooks.json
 │   └── agents/drift-reviewer.toml
-└── scripts/continuity
+└── scripts/
+    ├── continuity
+    ├── continuity-posix
+    └── continuity-windows.ps1
 ```
 
 파일 수는 이전의 네 파일보다 늘었지만 사람이 매번 읽는 context는 늘지 않는다. `CURRENT.md`와 `INDEX.md`가 세부 상태와 memory를 조건부로 연결하기 때문이다. 기계 상태와 실행 절차는 사람용 문서에 섞지 않고 각각 JSON, script, Skill에 둔다.
@@ -226,7 +229,7 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 ## 10. 비-LLM cadence
 
-`scripts/continuity`는 Python 표준 라이브러리만 사용한다. 기본 설정은 다음과 같다.
+`scripts/continuity`는 Python 3.10+ 표준 라이브러리만 사용한다. 기본 설정은 다음과 같다.
 
 ```json
 {
@@ -240,6 +243,8 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 이 cadence의 단위는 session이 아니라 `사용자 프롬프트 1회 -> Codex 작업 -> 최종 응답 1회`로 이루어진 턴이다. `Stop`에서 `CURRENT.md`와 active-state 파일들의 hash를 이전 값과 비교하고, hash가 달라진 턴만 memory counter를 올린다. 성공한 `Stop` command는 `{"continue": true}`를 출력한다. command 수나 token 수를 세지 않는다.
 
 다음 `UserPromptSubmit`에서는 due flag가 있을 때만 짧은 `additionalContext`를 출력한다. `SessionStart`는 최초 시작과 resume 때 같은 due 상태를 확인하고, 이전 턴의 `Stop`이 누락됐다면 저장된 hash와 비교해 한 번 복구한다. `SessionEnd`도 마지막 reconciliation을 위한 보조 경로이며 정상 카운트의 기준이 아니다. 저장 hash를 즉시 갱신하므로 여러 복구 경로가 같은 변경을 중복 집계하지 않는다. Script는 내용을 요약하거나 판단하지 않으므로 모델 호출 비용이 없다.
+
+각 hook handler에는 Linux/macOS용 `command`와 Windows 전용 `commandWindows`가 함께 있다. POSIX launcher는 `python3 -> python`, Windows PowerShell launcher는 `py -3 -> python -> python3` 순서로 실제 Python 3.10+ 실행 가능 여부를 확인한다. 두 launcher 모두 Git root에서 repository script를 찾으므로 project absolute path나 분석용 virtual environment를 저장하지 않는다.
 
 이 방식은 완벽한 의미론적 측정이 아니라 의도적으로 저렴한 근사치다. State를 갱신하지 않은 중요한 작업은 애초에 handoff 규칙 위반이므로 단순 hash가 그 문제도 드러낸다.
 
@@ -306,7 +311,16 @@ SessionEnd: thread 종료 시 최종 reconciliation 보조
 /path/to/codex-repository-framework/install-continuity /path/to/target-project
 ```
 
+대상은 먼저 초기화된 Git repository의 root여야 한다. Installer는 파일을 쓰기 전에 Git root, POSIX의 `sh` 또는 Windows PowerShell, 운영체제별 Python 3.10+ launcher를 검사한다. Windows에서는 다음처럼 같은 installer를 실행할 수 있다.
+
+```powershell
+py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project --dry-run
+py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project
+```
+
 Installer는 기존 root instruction의 managed block과 기존 hook JSON만 구조적으로 병합한다. 다른 기존 파일은 덮어쓰지 않는다. Root `AGENTS.override.md`가 활성 상태이면 auto mode가 중단되므로 override의 임시성 여부를 먼저 결정한다.
+
+기존 continuity runtime이 현재 turn hook API와 호환되지 않거나 managed launcher 경로와 충돌하면 새 hook만 설치해 자동화를 깨뜨리지 않고 중단한다. 사용자 변경을 검토한 뒤 명시적으로 `--replace-runtime`을 지정해야 교체한다. Hook 정의가 변경되면 `/hooks`에서 새 hash를 다시 검토하고 신뢰한다.
 
 설치 직후 새 Codex 세션에서 다음을 한 번 실행한다.
 
@@ -335,7 +349,7 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 - Root와 하위 지침: [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 - Repository skill: [`.agents/skills`](https://learn.chatgpt.com/docs/build-skills)
 - Custom reviewer role: [subagent configuration](https://learn.chatgpt.com/docs/agent-configuration/subagents)
-- 저비용 turn/session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
+- OS별 command와 저비용 turn/session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
 
 활성 custom agent는 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
 
