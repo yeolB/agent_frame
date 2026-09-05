@@ -12,6 +12,8 @@ Before substantial work:
 3. Read the primary active-state file and only memory records whose scope and trigger match.
 4. Inspect only the code and evidence needed for the current action.
 
+If `state/CURRENT.md` says `Continuity baseline: uninitialized`, ask the user to invoke `$initialize-project-continuity` before substantial work. Do not invoke this explicit-only Skill automatically.
+
 `GOAL.md` is user-owned. Never change it without an explicit user request. Treat local metrics and intermediate deliverables as evidence rather than replacements for its outcome.
 
 Choose the smallest coherent action that advances the goal. For new code, prefer the fewest cohesive modules with explicit inputs and outputs; do not add layers for hypothetical needs.

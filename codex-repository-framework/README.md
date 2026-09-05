@@ -41,7 +41,8 @@ memory/
 ├── INDEX.md                      # 자동 생성되는 조건부 memory router
 └── records/MEM-*.md              # 근거·범위·효과가 있는 durable memory
 .agents/skills/
-└── maintain-project-memory/      # 메모리 선별·정리 절차
+├── initialize-project-continuity/ # 명시적으로 한 번 실행하는 초기화
+└── maintain-project-memory/       # 메모리 선별·정리 절차
 .codex/
 ├── hooks.json                    # 시작/종료 때 로컬 스크립트 실행
 └── agents/drift-reviewer.toml    # 독립 read-only 장기 검토자
@@ -50,15 +51,29 @@ scripts/continuity                # 카운터, index, validation
 
 ### 처음 설정
 
-1. 사용자가 `GOAL.md`에 실제 목적, 성공 기준, guardrail, 금지할 shortcut, 중단 조건, 현재 방향, 고정 가정을 적습니다.
-2. 첫 active state를 만듭니다.
+설치 직후 새 Codex 세션에서 다음 Skill을 명시적으로 한 번 실행합니다.
+
+```text
+$initialize-project-continuity
+```
+
+이 Skill은 프로젝트의 README, manifests, entry points, test·CI 설정과 기존 지침을 조사하고, 사용자에게 부족한 목표 결정을 확인한 뒤 다음 기준선을 만듭니다.
+
+- 사용자 소유의 `GOAL.md`
+- primary task 하나를 가리키는 `state/CURRENT.md`
+- 첫 `state/active/<task>.md`
+- 근거가 있을 때만 생성하는 최소 memory records
+- 기존 project rules를 보존한 compact root `AGENTS.md`
+
+초기화가 끝나면 `CURRENT.md`의 `Continuity baseline`이 `established YYYY-MM-DD`가 됩니다. 이미 established 상태라면 Skill은 사용자가 `rebaseline`을 명시하지 않는 한 문서를 다시 쓰지 않습니다. Rebaseline에서도 `GOAL.md` 변경은 사용자 결정을 먼저 받으며 cadence와 기존 memory를 초기화하지 않습니다.
+
+수동으로 첫 active state를 만들어야 할 때만 다음 template을 사용합니다.
 
 ```bash
 cp state/active/_template.md state/active/first-task.md
 ```
 
-3. `state/CURRENT.md`의 `Primary task`와 `Active state`를 갱신합니다.
-4. 상태를 확인합니다.
+상태를 확인합니다.
 
 ```bash
 ./scripts/continuity validate

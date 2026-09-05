@@ -53,6 +53,11 @@ ID_PATTERN = re.compile(r"^MEM-(\d{4,})$")
 FILE_PATTERN = re.compile(r"^(MEM-\d{4,})(?:-[a-z0-9][a-z0-9-]*)?\.md$")
 FIELD_PATTERN = re.compile(r"^([A-Za-z][A-Za-z ]+):\s*(.+?)\s*$")
 INDEX_LINK_PATTERN = re.compile(r"\[(MEM-\d{4,})\]\(records/([^)]+\.md)\)")
+CURRENT_FIELD_PATTERN = re.compile(
+    r"^(Continuity baseline|Primary task|Active state):\s*(.+?)\s*$",
+    re.MULTILINE,
+)
+BASELINE_PATTERN = re.compile(r"^(?:uninitialized|established \d{4}-\d{2}-\d{2})$")
 
 
 class ContinuityError(RuntimeError):
@@ -312,6 +317,32 @@ def validate_index(records: list[dict[str, str]]) -> None:
             raise ContinuityError(f"Broken memory index link: records/{filename}")
 
 
+def validate_current() -> None:
+    if not CURRENT_PATH.is_file():
+        raise ContinuityError("state/CURRENT.md is missing")
+    content = CURRENT_PATH.read_text(encoding="utf-8")
+    fields = dict(CURRENT_FIELD_PATTERN.findall(content))
+    missing = {"Continuity baseline", "Primary task", "Active state"} - fields.keys()
+    if missing:
+        raise ContinuityError(f"state/CURRENT.md is missing fields: {', '.join(sorted(missing))}")
+    if not BASELINE_PATTERN.match(fields["Continuity baseline"]):
+        raise ContinuityError(
+            "Continuity baseline must be 'uninitialized' or 'established YYYY-MM-DD'"
+        )
+    primary_is_none = fields["Primary task"].lower() == "none"
+    active_is_none = fields["Active state"].lower() == "none"
+    if primary_is_none != active_is_none:
+        raise ContinuityError("Primary task and Active state must both be set or both be none")
+    if not active_is_none:
+        active_path = (ROOT / fields["Active state"].strip("`")).resolve()
+        try:
+            active_path.relative_to(ACTIVE_ROOT.resolve())
+        except ValueError as error:
+            raise ContinuityError("Active state must point inside state/active") from error
+        if not active_path.is_file():
+            raise ContinuityError(f"Active state does not exist: {fields['Active state']}")
+
+
 def command_status(args: argparse.Namespace) -> int:
     state = load_state()
     if args.json:
@@ -341,8 +372,7 @@ def command_validate(_: argparse.Namespace) -> int:
     validate_state(state)
     records = load_records()
     validate_index(records)
-    if not CURRENT_PATH.is_file():
-        raise ContinuityError("state/CURRENT.md is missing")
+    validate_current()
     print("Continuity state and memory index are valid.")
     return 0
 

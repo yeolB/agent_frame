@@ -64,6 +64,9 @@ repo/
 │       ├── _template.md
 │       └── MEM-0001-*.md
 ├── .agents/skills/
+│   ├── initialize-project-continuity/
+│   │   ├── SKILL.md
+│   │   └── agents/openai.yaml
 │   └── maintain-project-memory/SKILL.md
 ├── .codex/
 │   ├── hooks.json
@@ -114,7 +117,25 @@ Codex의 기본 project instruction budget은 root부터 current working directo
 
 여러 instruction 파일로 이름만 나누는 것은 해결책이 아니다. 같은 디렉터리에서는 하나만 선택되며, 하위 파일도 해당 working-directory chain에 들어올 때만 적용된다. `install-continuity --dry-run`은 가장 큰 project chain을 계산해 75%에서 경고하고 설정된 한도를 넘으면 변경 전에 중단한다.
 
-## 5. GOAL.md
+## 5. 초기 continuity 기준선
+
+Generic template을 그대로 방치하면 처음 채워진 표현과 분류가 이후 세션의 관성이 된다. 설치 직후 `$initialize-project-continuity`를 명시적으로 한 번 실행해 프로젝트별 기준선을 만든다.
+
+Skill은 README, manifests, entry points, tests, CI, 기존 project instructions 같은 primary evidence를 조사한다. 코드에서 확인할 수 없는 실제 목적과 성공 기준은 사용자에게 묻는다. 그 결과로 user-owned `GOAL.md`, primary task 하나를 가리키는 `CURRENT.md`, 첫 active state, 필요할 때만 최소 memory record를 만든다.
+
+초기화는 다음을 만들지 않는다.
+
+- 추측성 architecture와 module map
+- 여러 speculative active tasks
+- 근거를 채우기 위한 memory
+- Coder를 포함한 custom agents
+- 사용자가 요청하지 않은 project-specific Skills
+
+`CURRENT.md`의 `Continuity baseline`이 `established YYYY-MM-DD`이면 초기화 Skill은 자동으로 재작성하지 않는다. Rebaseline은 사용자가 명시적으로 요청해야 하며, `GOAL.md`의 material change는 다시 사용자 결정을 받는다. 기존 cadence와 memory를 reset하지 않는다.
+
+이 Skill은 `allow_implicit_invocation: false`이므로 ordinary work 중 자동 선택되지 않는다. 초기 문서 생성이 끝나면 기존 continuity 흐름만 사용한다.
+
+## 6. GOAL.md
 
 `GOAL.md`는 사용자 소유 policy다. Codex는 명시적 요청 없이 수정하지 않는다.
 
@@ -132,7 +153,7 @@ Codex의 기본 project instruction budget은 root부터 current working directo
 
 Evidence가 목표 변경을 시사하면 active state에 제안하고 사용자가 결정한다. Agent가 local metric이나 편한 산출물을 성공 기준으로 바꾸지 않는다.
 
-## 6. CURRENT와 active state
+## 7. CURRENT와 active state
 
 `state/CURRENT.md`는 하나의 사용자 가독형 router다.
 
@@ -161,7 +182,7 @@ Verification
 
 여러 작업이 있어도 시작 노드는 `CURRENT.md` 한 개다. Primary task 하나를 명시하고 나머지는 링크만 둔다.
 
-## 7. 범용 durable memory
+## 8. 범용 durable memory
 
 Memory는 연구 ledger로 고정하지 않는다. 다음 여섯 유형이 공통 형식으로 공존한다.
 
@@ -185,7 +206,7 @@ Status는 `active`, `disputed`, `superseded`, `archived`다. 충돌하는 근거
 
 `memory/INDEX.md`는 script가 생성하며 archived record를 제외한다. ID, type, scope, status, load trigger, summary만 보여 주므로 agent가 필요한 원문만 선택할 수 있다.
 
-## 8. Memory maintenance Skill
+## 9. Memory maintenance Skill
 
 진행 중 발견은 우선 active state의 `Memory Candidates`에 둔다. `$maintain-project-memory`는 다음 조건 중 하나일 때 사용한다.
 
@@ -203,7 +224,7 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 이 명령은 index를 다시 만들고 record를 검증하며 memory counter를 초기화하고 review counter를 한 단계 올린다.
 
-## 9. 비-LLM cadence
+## 10. 비-LLM cadence
 
 `scripts/continuity`는 Python 표준 라이브러리만 사용한다. 기본 설정은 다음과 같다.
 
@@ -222,7 +243,7 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 시간 기반 scheduled task는 repository가 닫힌 동안에도 실행할 필요가 있는 외부 운영에는 적합하지만, 여기서는 실제 작업량과 분리된다. 따라서 기본 cadence는 달력 시간이 아니라 changed session 수를 사용한다.
 
-## 10. Fresh independent review
+## 11. Fresh independent review
 
 기본적으로 memory maintenance 5회마다 drift review가 due가 된다. Review는 상주 process가 아니라 root가 그 시점에 fresh `drift_reviewer` subagent를 한 번 만들고 보고를 회수하는 작업이다.
 
@@ -242,7 +263,7 @@ Reviewer는 read-only이고 child agent를 만들지 않으며 completion counte
 
 Review 주기는 비용 조절을 위한 기본값일 뿐이다. GOAL 변경 가능성, memory conflict, 반복 실패, 근거 없는 복잡성 증가가 보이면 일찍 실행한다.
 
-## 11. Session flow
+## 12. Session flow
 
 ```text
 SessionStart hook: due 여부만 계산
@@ -259,7 +280,7 @@ SessionStart hook: due 여부만 계산
 
 이는 role을 자동 순환시키는 상태기계가 아니다. Ordinary work는 ordinary work로 남고, script는 유지보수가 필요한 시점을 알리는 역할만 한다.
 
-## 12. Archive 경계
+## 13. Archive 경계
 
 이전의 Level 2 architecture extension은 `codex-repository-framework/archive/`에 frozen, non-operational 상태로 보존한다. 현재 프레임은 다음을 하지 않는다.
 
@@ -270,7 +291,7 @@ SessionStart hook: due 여부만 계산
 
 구조 관련 문제도 먼저 현재 Root가 코드와 범용 memory 안에서 직접 다룬다. 별도 구조 체계가 정말 필요하면 사용자가 새 설계를 명시적으로 결정해야 한다. Archive는 과거 판단을 검토하라는 요청이 있을 때만 참고 자료로 연다.
 
-## 13. 적용과 운영
+## 14. 적용과 운영
 
 새 프로젝트와 기존 프로젝트에 동일한 safe installer를 사용한다.
 
@@ -280,6 +301,14 @@ SessionStart hook: due 여부만 계산
 ```
 
 Installer는 기존 root instruction의 managed block과 기존 hook JSON만 구조적으로 병합한다. 다른 기존 파일은 덮어쓰지 않는다. Root `AGENTS.override.md`가 활성 상태이면 auto mode가 중단되므로 override의 임시성 여부를 먼저 결정한다.
+
+설치 직후 새 Codex 세션에서 다음을 한 번 실행한다.
+
+```text
+$initialize-project-continuity
+```
+
+Skill이 목표 결정을 충분히 확보하고 초기 문서를 검증한 뒤 `Continuity baseline`을 established로 바꾼다.
 
 첫 작업 생성:
 
@@ -293,7 +322,7 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 
 `archive/`는 설치 대상에서 제외한다.
 
-## 14. 공식 Codex 구조와의 대응
+## 15. 공식 Codex 구조와의 대응
 
 이 프레임은 별도의 proprietary loader를 만들지 않고 Codex가 제공하는 repository 구조를 사용한다.
 
@@ -304,10 +333,11 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 
 활성 custom agent는 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
 
-## 15. 핵심 판단
+## 16. 핵심 판단
 
-이 설계에서 값비싼 LLM은 의미 판단이 필요한 두 곳에만 사용된다.
+이 설계에서 값비싼 LLM은 의미 판단이 필요한 세 곳에만 사용된다.
 
+- 프로젝트 도입 시 한 번 수행하는 continuity initialization
 - 후보를 압축하고 충돌을 다루는 memory maintenance
 - 기존 작업 관성에서 분리된 independent drift review
 

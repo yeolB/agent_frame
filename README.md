@@ -13,7 +13,7 @@
 ./codex-repository-framework/install-continuity /path/to/target-project
 ```
 
-Installer는 기존 파일을 덮어쓰지 않고 hooks만 구조적으로 병합합니다. 기본 32 KiB instruction budget을 넘는 프로젝트는 쓰기 전에 중단합니다. 적용 후 사용자가 `GOAL.md`를 작성하고 `state/active/_template.md`에서 첫 작업 상태를 만듭니다.
+Installer는 기존 파일을 덮어쓰지 않고 `AGENTS.md`의 managed block과 hooks만 구조적으로 병합합니다. 기본 32 KiB instruction budget을 넘는 프로젝트는 쓰기 전에 중단합니다. 적용 직후 Codex에서 `$initialize-project-continuity`를 한 번 실행해 프로젝트 근거와 사용자 결정으로 `GOAL`, `CURRENT`, 첫 active state의 기준을 잡습니다.
 
 적용과 운영 방법은 [프레임워크 README](./codex-repository-framework/README.md), 현재 설계는 [v3.1 가이드](./docs/codex_repository_continuity_framework_guide_v3-1.md)를 참고하세요. [DOCX](./codex_repository_continuity_framework_guide_v3-1.docx)도 함께 제공합니다.
 

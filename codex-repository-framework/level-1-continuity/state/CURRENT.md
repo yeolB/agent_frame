@@ -1,6 +1,7 @@
 # Current
 
 Last updated: YYYY-MM-DD
+Continuity baseline: uninitialized
 Primary task: none
 Active state: none
 

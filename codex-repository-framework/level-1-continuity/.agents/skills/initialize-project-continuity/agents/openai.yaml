@@ -1,0 +1,6 @@
+interface:
+  display_name: "Initialize Project Continuity"
+  short_description: "Establish the first trustworthy continuity documents"
+  default_prompt: "Use $initialize-project-continuity to establish this repository’s initial goal, current state, and evidence-backed memory."
+policy:
+  allow_implicit_invocation: false
