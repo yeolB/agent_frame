@@ -35,7 +35,7 @@ Root agent는 최초 전파와 최종 통합 노드다. 시작할 때 여러 문
 
 ### 행동 상태기계 대신 주기적 위생 관리
 
-Agent를 여러 mode로 자동 전환하는 복잡한 장치를 두지 않는다. 비-LLM 코드가 변경된 작업 세션을 세고, 짧은 주기로 memory maintenance를, 더 긴 주기로 independent review를 알린다.
+Agent를 여러 mode로 자동 전환하는 복잡한 장치를 두지 않는다. 비-LLM 코드가 상태 변경이 있었던 Codex 턴을 세고, 짧은 주기로 memory maintenance를, 더 긴 주기로 independent review를 알린다.
 
 ### 단일 운영 프레임
 
@@ -230,18 +230,20 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 ```json
 {
-  "memory_every_changed_sessions": 3,
+  "memory_every_changed_turns": 3,
   "review_every_memory_runs": 5
 }
 ```
 
-`SessionEnd`에서 `CURRENT.md`와 실제 active-state 파일들의 hash를 이전 값과 비교한다. Active work가 있고 hash가 달라진 세션만 memory counter를 올린다. 채팅 횟수, command 수, token 수를 세지 않는다.
+이전 v1의 `memory_every_changed_sessions`와 `changed_sessions_since_memory`는 새 script가 처음 상태를 저장할 때 기존 값을 보존한 채 turn 기반 v2 키로 옮긴다.
 
-`SessionStart`에서는 due flag가 있을 때만 짧은 `additionalContext`를 출력한다. Script는 내용을 요약하거나 판단하지 않으므로 모델 호출 비용이 없다.
+이 cadence의 단위는 session이 아니라 `사용자 프롬프트 1회 -> Codex 작업 -> 최종 응답 1회`로 이루어진 턴이다. `Stop`에서 `CURRENT.md`와 active-state 파일들의 hash를 이전 값과 비교하고, hash가 달라진 턴만 memory counter를 올린다. 성공한 `Stop` command는 `{"continue": true}`를 출력한다. command 수나 token 수를 세지 않는다.
+
+다음 `UserPromptSubmit`에서는 due flag가 있을 때만 짧은 `additionalContext`를 출력한다. `SessionStart`는 최초 시작과 resume 때 같은 due 상태를 확인하고, 이전 턴의 `Stop`이 누락됐다면 저장된 hash와 비교해 한 번 복구한다. `SessionEnd`도 마지막 reconciliation을 위한 보조 경로이며 정상 카운트의 기준이 아니다. 저장 hash를 즉시 갱신하므로 여러 복구 경로가 같은 변경을 중복 집계하지 않는다. Script는 내용을 요약하거나 판단하지 않으므로 모델 호출 비용이 없다.
 
 이 방식은 완벽한 의미론적 측정이 아니라 의도적으로 저렴한 근사치다. State를 갱신하지 않은 중요한 작업은 애초에 handoff 규칙 위반이므로 단순 hash가 그 문제도 드러낸다.
 
-시간 기반 scheduled task는 repository가 닫힌 동안에도 실행할 필요가 있는 외부 운영에는 적합하지만, 여기서는 실제 작업량과 분리된다. 따라서 기본 cadence는 달력 시간이 아니라 changed session 수를 사용한다.
+시간 기반 scheduled task는 repository가 닫힌 동안에도 실행할 필요가 있는 외부 운영에는 적합하지만, 여기서는 실제 작업량과 분리된다. 따라서 기본 cadence는 달력 시간이 아니라 changed turn 수를 사용한다.
 
 ## 11. Fresh independent review
 
@@ -263,10 +265,10 @@ Reviewer는 read-only이고 child agent를 만들지 않으며 completion counte
 
 Review 주기는 비용 조절을 위한 기본값일 뿐이다. GOAL 변경 가능성, memory conflict, 반복 실패, 근거 없는 복잡성 증가가 보이면 일찍 실행한다.
 
-## 12. Session flow
+## 12. Turn flow와 session 복구
 
 ```text
-SessionStart hook: due 여부만 계산
+UserPromptSubmit hook: 누락된 Stop 복구 + due context 주입
   -> Root AGENTS 적용
   -> GOAL + CURRENT + INDEX 읽기
   -> 관련 active state + memory + evidence 읽기
@@ -275,7 +277,11 @@ SessionStart hook: due 여부만 계산
   -> due이면 memory Skill 실행
   -> 더 긴 due이면 fresh reviewer 보고 회수
   -> Root가 수정과 결론 통합
-  -> SessionEnd hook: changed session이면 counter +1
+  -> 최종 응답
+  -> Stop hook: state hash가 달라진 turn이면 counter +1, {"continue": true}
+
+SessionStart: 최초 시작/resume의 due 확인 + 누락된 Stop 복구
+SessionEnd: thread 종료 시 최종 reconciliation 보조
 ```
 
 이는 role을 자동 순환시키는 상태기계가 아니다. Ordinary work는 ordinary work로 남고, script는 유지보수가 필요한 시점을 알리는 역할만 한다.
@@ -329,7 +335,7 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 - Root와 하위 지침: [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 - Repository skill: [`.agents/skills`](https://learn.chatgpt.com/docs/build-skills)
 - Custom reviewer role: [subagent configuration](https://learn.chatgpt.com/docs/agent-configuration/subagents)
-- 저비용 session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
+- 저비용 turn/session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
 
 활성 custom agent는 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
 

@@ -44,7 +44,7 @@ memory/
 ├── initialize-project-continuity/ # 명시적으로 한 번 실행하는 초기화
 └── maintain-project-memory/       # 메모리 선별·정리 절차
 .codex/
-├── hooks.json                    # 시작/종료 때 로컬 스크립트 실행
+├── hooks.json                    # 턴 전후와 세션 복구 때 로컬 스크립트 실행
 └── agents/drift-reviewer.toml    # 독립 read-only 장기 검토자
 scripts/continuity                # 카운터, index, validation
 ```
@@ -126,19 +126,23 @@ AGENTS.md
 
 기본값은 다음과 같습니다.
 
-- current/active state가 실제로 달라진 세션 3회마다 memory maintenance
+- current/active state가 실제로 달라진 턴 3회마다 memory maintenance
 - memory maintenance 5회마다 independent drift review
 
-`SessionEnd` hook은 상태 파일의 hash가 이전과 달라졌는지만 계산합니다. `SessionStart` hook은 due 여부가 있을 때 짧은 안내 문장만 context에 추가합니다. 요약, 판단, 리뷰에는 모델을 쓰지만 **세기와 알림에는 모델을 쓰지 않습니다**.
+여기서 턴은 `사용자 프롬프트 1회 -> Codex 작업 -> 최종 응답 1회`입니다. `Stop` hook이 `CURRENT.md`와 active-state 파일의 hash 변화를 확인해 해당 턴을 셉니다. 성공 시 Codex가 정상적으로 멈추도록 `{"continue": true}`를 출력합니다. 다음 `UserPromptSubmit` hook은 due일 때만 짧은 안내를 context에 추가합니다.
+
+`SessionStart`는 처음 열기와 resume 시 due 상태를 알리고, 이전 `Stop`이 실행되지 않은 비정상 종료의 hash 차이를 복구합니다. `SessionEnd`도 마지막 복구·정리를 위한 보조 hook일 뿐 정상 cadence의 필수 카운터가 아닙니다. 어느 경로가 먼저 복구해도 저장된 hash 때문에 같은 변경을 두 번 세지 않습니다. 요약, 판단, 리뷰에는 모델을 쓰지만 **세기와 알림에는 모델을 쓰지 않습니다**.
 
 주기는 `state/cadence.json`의 두 설정으로 바꿀 수 있습니다.
 
 ```json
 {
-  "memory_every_changed_sessions": 3,
+  "memory_every_changed_turns": 3,
   "review_every_memory_runs": 5
 }
 ```
+
+이전 v1 상태의 `memory_every_changed_sessions`와 `changed_sessions_since_memory`는 새 script가 처음 상태를 저장할 때 turn 기반 v2 키로 값을 보존해 옮깁니다.
 
 수동 명령은 다음과 같습니다.
 

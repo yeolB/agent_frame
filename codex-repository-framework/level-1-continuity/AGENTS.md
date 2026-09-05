@@ -20,7 +20,7 @@ Choose the smallest coherent action that advances the goal. For new code, prefer
 
 Keep `state/CURRENT.md` as a short router and `state/active/<task>.md` as a current handoff snapshot, not an activity diary. Update them after meaningful milestones, decisions, evidence or scope changes, and before handoff. Put possible durable knowledge under `Memory Candidates`; do not rely on chat history as its only record.
 
-Hooks count sessions in which current or active state changed without calling a model. When memory maintenance is due, invoke `$maintain-project-memory`. When independent review is due, create one fresh read-only `drift_reviewer`, give it primary sources rather than the implementer's conclusions, wait for its report, integrate accepted corrections, and run `./scripts/continuity review-complete`. The reviewer does not edit files or create agents.
+Hooks count turns in which current or active state changed without calling a model. When memory maintenance is due, invoke `$maintain-project-memory`. When independent review is due, create one fresh read-only `drift_reviewer`, give it primary sources rather than the implementer's conclusions, wait for its report, integrate accepted corrections, and run `./scripts/continuity review-complete`. The reviewer does not edit files or create agents.
 
 Run review early if the goal appears to require change, durable memories conflict, scope grows without evidence, or a rejected direction is repeatedly retried.
 

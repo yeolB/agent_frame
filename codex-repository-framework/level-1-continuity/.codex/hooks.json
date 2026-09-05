@@ -1,5 +1,5 @@
 {
-  "description": "Track continuity cadence without model calls and surface due maintenance at session start.",
+  "description": "Track changed Codex turns without model calls, surface due work before the next turn, and recover missed Stop events.",
   "hooks": {
     "SessionStart": [
       {
@@ -11,6 +11,30 @@
             "timeout": 3,
             "additionalContextLimit": 1000,
             "statusMessage": "Checking repository continuity"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/continuity\" turn-start",
+            "timeout": 3,
+            "additionalContextLimit": 1000,
+            "statusMessage": "Checking repository continuity"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/continuity\" turn-stop",
+            "timeout": 3
           }
         ]
       }

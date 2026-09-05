@@ -1,8 +1,8 @@
 {
-  "version": 1,
-  "memory_every_changed_sessions": 3,
+  "version": 2,
+  "memory_every_changed_turns": 3,
   "review_every_memory_runs": 5,
-  "changed_sessions_since_memory": 0,
+  "changed_turns_since_memory": 0,
   "memory_runs_since_review": 0,
   "last_state_hash": null,
   "last_memory_at": null,

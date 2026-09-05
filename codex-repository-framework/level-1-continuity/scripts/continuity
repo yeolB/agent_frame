@@ -25,10 +25,10 @@ RECORDS_ROOT = MEMORY_ROOT / "records"
 INDEX_PATH = MEMORY_ROOT / "INDEX.md"
 
 DEFAULT_STATE: dict[str, Any] = {
-    "version": 1,
-    "memory_every_changed_sessions": 3,
+    "version": 2,
+    "memory_every_changed_turns": 3,
     "review_every_memory_runs": 5,
-    "changed_sessions_since_memory": 0,
+    "changed_turns_since_memory": 0,
     "memory_runs_since_review": 0,
     "last_state_hash": None,
     "last_memory_at": None,
@@ -103,6 +103,17 @@ def load_state() -> dict[str, Any]:
         loaded = json.loads(STATE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ContinuityError(f"Cannot read {STATE_PATH.relative_to(ROOT)}: {error}") from error
+    if loaded.get("version") == 1:
+        loaded = dict(loaded)
+        loaded["version"] = 2
+        loaded["memory_every_changed_turns"] = loaded.pop(
+            "memory_every_changed_sessions",
+            DEFAULT_STATE["memory_every_changed_turns"],
+        )
+        loaded["changed_turns_since_memory"] = loaded.pop(
+            "changed_sessions_since_memory",
+            DEFAULT_STATE["changed_turns_since_memory"],
+        )
     state = dict(DEFAULT_STATE)
     state.update(loaded)
     validate_state(state)
@@ -110,18 +121,18 @@ def load_state() -> dict[str, Any]:
 
 
 def validate_state(state: dict[str, Any]) -> None:
-    if state.get("version") != 1:
+    if state.get("version") != 2:
         raise ContinuityError("Unsupported cadence state version")
     for key in (
-        "memory_every_changed_sessions",
+        "memory_every_changed_turns",
         "review_every_memory_runs",
-        "changed_sessions_since_memory",
+        "changed_turns_since_memory",
         "memory_runs_since_review",
     ):
         value = state.get(key)
         if not isinstance(value, int) or value < 0:
             raise ContinuityError(f"{key} must be a non-negative integer")
-    if state["memory_every_changed_sessions"] == 0 or state["review_every_memory_runs"] == 0:
+    if state["memory_every_changed_turns"] == 0 or state["review_every_memory_runs"] == 0:
         raise ContinuityError("Cadence thresholds must be greater than zero")
 
 
@@ -140,7 +151,7 @@ def active_files() -> list[Path]:
     )
 
 
-def state_digest() -> tuple[str, bool]:
+def state_digest() -> str:
     files = [CURRENT_PATH, *active_files()]
     digest = hashlib.sha256()
     for path in files:
@@ -150,11 +161,22 @@ def state_digest() -> tuple[str, bool]:
         if path.exists():
             digest.update(path.read_bytes())
         digest.update(b"\0")
-    return digest.hexdigest(), bool(files[1:])
+    return digest.hexdigest()
+
+
+def reconcile_state_digest(state: dict[str, Any]) -> bool:
+    """Count one changed turn, or establish a baseline on the first observation."""
+    digest = state_digest()
+    previous_digest = state.get("last_state_hash")
+    changed = previous_digest is not None and digest != previous_digest
+    if changed:
+        state["changed_turns_since_memory"] += 1
+    state["last_state_hash"] = digest
+    return changed
 
 
 def due_flags(state: dict[str, Any]) -> tuple[bool, bool]:
-    memory_due = state["changed_sessions_since_memory"] >= state["memory_every_changed_sessions"]
+    memory_due = state["changed_turns_since_memory"] >= state["memory_every_changed_turns"]
     review_due = state["memory_runs_since_review"] >= state["review_every_memory_runs"]
     return memory_due, review_due
 
@@ -162,7 +184,7 @@ def due_flags(state: dict[str, Any]) -> tuple[bool, bool]:
 def status_lines(state: dict[str, Any]) -> list[str]:
     memory_due, review_due = due_flags(state)
     return [
-        f"Changed sessions since memory maintenance: {state['changed_sessions_since_memory']}/{state['memory_every_changed_sessions']}",
+        f"Changed turns since memory maintenance: {state['changed_turns_since_memory']}/{state['memory_every_changed_turns']}",
         f"Memory runs since independent review: {state['memory_runs_since_review']}/{state['review_every_memory_runs']}",
         f"Memory maintenance due: {'yes' if memory_due else 'no'}",
         f"Independent review due: {'yes' if review_due else 'no'}",
@@ -174,9 +196,7 @@ def read_hook_input() -> None:
         sys.stdin.read()
 
 
-def command_session_start(_: argparse.Namespace) -> int:
-    read_hook_input()
-    state = load_state()
+def due_messages(state: dict[str, Any]) -> list[str]:
     memory_due, review_due = due_flags(state)
     messages: list[str] = []
     if memory_due:
@@ -189,24 +209,52 @@ def command_session_start(_: argparse.Namespace) -> int:
             "drift_reviewer, wait for its report, integrate accepted corrections, and run "
             "./scripts/continuity review-complete."
         )
+    return messages
+
+
+def emit_due_context(state: dict[str, Any], hook_event_name: str) -> None:
+    messages = due_messages(state)
     if messages:
         output = {
             "hookSpecificOutput": {
-                "hookEventName": "SessionStart",
+                "hookEventName": hook_event_name,
                 "additionalContext": "\n".join(messages),
             }
         }
         print(json.dumps(output, ensure_ascii=False))
+
+
+def command_turn_start(_: argparse.Namespace) -> int:
+    read_hook_input()
+    state = load_state()
+    reconcile_state_digest(state)
+    save_state(state)
+    emit_due_context(state, "UserPromptSubmit")
+    return 0
+
+
+def command_turn_stop(_: argparse.Namespace) -> int:
+    read_hook_input()
+    state = load_state()
+    reconcile_state_digest(state)
+    save_state(state)
+    print(json.dumps({"continue": True}))
+    return 0
+
+
+def command_session_start(_: argparse.Namespace) -> int:
+    read_hook_input()
+    state = load_state()
+    reconcile_state_digest(state)
+    save_state(state)
+    emit_due_context(state, "SessionStart")
     return 0
 
 
 def command_session_end(_: argparse.Namespace) -> int:
     read_hook_input()
     state = load_state()
-    digest, has_active_work = state_digest()
-    if has_active_work and digest != state.get("last_state_hash"):
-        state["changed_sessions_since_memory"] += 1
-    state["last_state_hash"] = digest
+    reconcile_state_digest(state)
     save_state(state)
     return 0
 
@@ -381,8 +429,9 @@ def command_memory_complete(_: argparse.Namespace) -> int:
     records = rebuild_index()
     validate_index(records)
     state = load_state()
-    state["changed_sessions_since_memory"] = 0
+    state["changed_turns_since_memory"] = 0
     state["memory_runs_since_review"] += 1
+    state["last_state_hash"] = state_digest()
     state["last_memory_at"] = now_iso()
     state["last_memory_commit"] = git_head()
     save_state(state)
@@ -411,8 +460,10 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser.set_defaults(handler=command_status)
 
     for name, help_text, handler in (
-        ("session-start", "Emit SessionStart hook context when work is due", command_session_start),
-        ("session-end", "Count a session when continuity state changed", command_session_end),
+        ("turn-start", "Recover a missed Stop and emit UserPromptSubmit due context", command_turn_start),
+        ("turn-stop", "Count a turn when continuity state changed", command_turn_stop),
+        ("session-start", "Recover a missed Stop and emit SessionStart due context", command_session_start),
+        ("session-end", "Perform final continuity state reconciliation", command_session_end),
         ("next-id", "Print the next available memory record ID", command_next_id),
         ("index", "Regenerate memory/INDEX.md from records", command_index),
         ("validate", "Validate cadence state and memory records", command_validate),
