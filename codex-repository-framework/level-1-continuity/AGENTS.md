@@ -12,11 +12,13 @@ Before substantial work:
 3. Read the primary active-state file and only memory records whose scope and trigger match.
 4. Inspect only the code and evidence needed for the current action.
 
+Before committing to substantial implementation whose direction could cause meaningful rework, invoke `$plan-substantial-work`. Use it for large features, multi-module or interface changes, significant refactors or migrations, unclear solution paths, new dependencies or services, and repeated local improvements that are not moving the goal. Skip it for small, local, straightforward work. Resume ordinary execution after recording its compact strategy checkpoint in the primary active-state file; do not create a planning subsystem or separate implementation agent.
+
 If `state/CURRENT.md` says `Continuity baseline: uninitialized`, ask the user to invoke `$initialize-project-continuity` before substantial work. Do not invoke this explicit-only Skill automatically.
 
 `GOAL.md` is user-owned. Never change it without an explicit user request. Treat local metrics and intermediate deliverables as evidence rather than replacements for its outcome.
 
-Choose the smallest coherent action that advances the goal. For new code, prefer the fewest cohesive modules with explicit inputs and outputs; do not add layers for hypothetical needs.
+Choose the smallest coherent action that advances the goal. For new code, prefer the fewest cohesive modules with explicit inputs and outputs; do not add layers for hypothetical needs. Treat prior implementation as evidence, not a reason by itself to continue the same approach.
 
 Keep `state/CURRENT.md` as a short router and `state/active/<task>.md` as a current handoff snapshot, not an activity diary. Update them after meaningful milestones, decisions, evidence or scope changes, and before handoff. Put possible durable knowledge under `Memory Candidates`; do not rely on chat history as its only record.
 

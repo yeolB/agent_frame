@@ -1,6 +1,6 @@
 # Codex Repository Continuity Framework
 
-이 번들은 긴 작업을 여러 Codex 세션으로 나눠도 목표, 현재 판단 지점, 검증 근거, 이미 배운 제약이 끊기지 않게 합니다. 특정 연구 절차를 강제하지 않고 어떤 프로젝트에도 같은 정보 구조를 사용합니다.
+이 번들은 긴 작업을 여러 Codex 세션으로 나눠도 목표, 현재 판단 지점, 검증 근거, 이미 배운 제약이 끊기지 않게 합니다. 또한 큰 작업을 시작할 때 현재 해법에 갇히지 않았는지 짧게 점검하고, 장기 reviewer가 전략과 누적 구조를 함께 살핍니다. 특정 연구 절차를 강제하지 않고 어떤 프로젝트에도 같은 정보 구조를 사용합니다.
 
 운영 가능한 프레임은 Level 1 하나입니다. 이전 architecture extension은 `archive/`에 보존하지만 설치하거나 agent context로 사용하지 않습니다.
 
@@ -43,7 +43,8 @@ memory/
 └── records/MEM-*.md              # 근거·범위·효과가 있는 durable memory
 .agents/skills/
 ├── initialize-project-continuity/ # 명시적으로 한 번 실행하는 초기화
-└── maintain-project-memory/       # 메모리 선별·정리 절차
+├── maintain-project-memory/       # 메모리 선별·정리 절차
+└── plan-substantial-work/         # 큰 구현 전 task-scoped 전략 점검
 .codex/
 ├── hooks.json                    # 턴 전후와 세션 복구 때 로컬 스크립트 실행
 └── agents/drift-reviewer.toml    # 독립 read-only 장기 검토자
@@ -139,6 +140,20 @@ AGENTS.md
 
 `CURRENT.md`는 한 개의 얕은 시작점입니다. 모든 상태를 복제하지 않고 primary task와 다음 행동을 가리킵니다. `state/active`는 작업별 현재 snapshot이며 명령 일지가 아닙니다.
 
+## 큰 작업 전 Planner
+
+큰 기능, 여러 module·interface를 건드리는 변경, 중요한 refactor·migration, 방향이 불명확한 구현, 새 dependency·service 도입처럼 잘못된 방향의 재작업 비용이 큰 경우에는 main Codex가 `$plan-substantial-work`를 먼저 사용합니다. 작은 local bug fix나 기계적 변경에는 사용하지 않습니다. 파일 수나 예상 line 수 같은 고정 threshold 대신 **잘못된 접근을 택했을 때 의미 있는 재작업이 생기는가**로 판단합니다.
+
+Planner는 전체 repository architecture를 정기 감사하지 않습니다. 현재 task에 필요한 `GOAL`, current/active state, 관련 memory, 관련 code·interface·evidence만 읽고 다음을 확인합니다.
+
+- 실제 outcome과 근본 bottleneck이 무엇인지
+- 현재 구현이 원인 대신 증상만 다루는지
+- 제거·단순화·기존 capability 재사용으로 incremental work를 없앨 수 있는지
+- sunk cost가 없다면 같은 접근을 다시 선택할지
+- 대안의 leverage가 전환 비용과 risk를 실제로 넘는지
+
+기존 방향 유지도 정상 결론입니다. 결과는 별도 `PLAN.md`가 아니라 primary active state의 `Decisions and Rationale` 아래 짧은 `Strategy Checkpoint`와 갱신된 `Next Action`으로만 남깁니다. 그 뒤 같은 root agent가 ordinary execution을 계속하며 새 agent, hook, counter, 실행 mode를 만들지 않습니다.
+
 ## 범용 메모리
 
 진행 중 발견은 먼저 active state의 `Memory Candidates`에 둡니다. 정리 시점에 `$maintain-project-memory`가 다음 기준으로 선별합니다.
@@ -193,7 +208,14 @@ AGENTS.md
 - `memory/INDEX.md`와 관련 records
 - 판단을 검증할 primary code, 결과, 로그
 
-Reviewer는 read-only이며 수정이나 추가 agent 생성을 하지 않습니다. 목표 대체, 실패 반복, 근거 없는 범위 확장, 낡거나 충돌하는 memory를 찾아 root에 보고합니다. Root가 제안을 판단하고 필요한 수정을 적용한 뒤 `review-complete`를 실행합니다.
+Reviewer는 read-only이며 수정이나 추가 agent 생성을 하지 않습니다. 기존 continuity 점검에 다음 두 관점을 더합니다.
+
+- **전략:** 실제 진전이 있어도 낮은 leverage의 solution space에 갇혀 있는지, sunk-cost bias나 잘못 잡은 bottleneck 때문에 제거 가능한 일을 계속 최적화하는지 확인합니다.
+- **누적 architecture:** 서로 무관한 module의 coupling, 깊거나 순환하는 dependency, god module, layer leakage, 큰 change blast radius, 책임 중복과 accidental abstraction이 쌓였는지 repository-wide로 확인합니다.
+
+단순히 불완전하거나 문제 자체가 복잡해서 생긴 구조는 finding이 아닙니다. Reviewer는 먼저 top-level structure, manifests, 직전 review 이후 diff, 기존 구조 자료를 저비용으로 훑고 신호가 있을 때만 깊게 조사합니다. 이미 dependency/call graph, impact analysis, symbol 관계, cycle·fan metric 같은 도구나 산출물이 있으면 근거로 활용하지만 새 graph system을 설치하거나 hard dependency로 만들지 않습니다. 도구가 없으면 manifests, imports, symbols, tests와 targeted search로 대체합니다.
+
+각 finding은 `goal`, `strategy`, `architecture`, `memory`로 구분하고 근거·영향·조치·확신도를 설명합니다. Architecture finding은 교정 범위와 전환 비용도 포함합니다. “현재 접근이 적절하므로 계속한다”도 정상 결론입니다. Root가 제안을 판단하고 필요한 수정을 적용한 뒤 `review-complete`를 실행합니다.
 
 목표 변경이 필요해 보이거나 memory 충돌, 반복 실패, 근거 없는 복잡성 증가가 나타나면 카운터와 무관하게 일찍 검토할 수 있습니다.
 
@@ -206,4 +228,4 @@ Reviewer는 read-only이며 수정이나 추가 agent 생성을 하지 않습니
 - 일반 작업 중 archive 문서를 context로 읽지 않습니다.
 - 사용자가 과거 설계를 명시적으로 요청할 때만 참고합니다.
 
-향후 구조 문제가 생기더라도 archive를 자동으로 활성화하지 않습니다. 현재 Level 1 안에서 문제를 다루고, 별도 구조가 정말 필요하면 사용자가 새 설계를 결정합니다.
+향후 구조 문제가 생기더라도 archive를 자동으로 활성화하지 않습니다. 현재 Level 1 reviewer가 구조를 진단하고 root가 필요한 코드 변경을 직접 수행합니다. 별도 구조 체계가 정말 필요하면 사용자가 새 설계를 결정합니다.

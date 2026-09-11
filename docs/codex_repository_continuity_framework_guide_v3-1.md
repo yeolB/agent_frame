@@ -19,7 +19,7 @@
   -> 원래 성공 기준 상실
 ```
 
-이는 단순한 chat memory 부족만이 아니라 goal drift, handoff 손실, 검증 discipline의 문제다. 해결책은 모든 대화를 보존하는 것이 아니라 다음 세션에 필요한 정보를 역할별로 분리하는 것이다.
+이는 단순한 chat memory 부족만이 아니라 goal drift, handoff 손실, 검증 discipline의 문제다. 여기에 목표를 기억하고 실제 진전을 만들면서도 낮은 leverage의 해법 안에서 오래 최적화하는 **strategic/local optimization failure**가 별도로 존재한다. 해결책은 모든 대화를 보존하는 것이 아니라 다음 세션에 필요한 정보를 역할별로 분리하고, 큰 투자 전과 장기 누적 시점에 현재 접근 자체를 다시 묻는 것이다.
 
 ## 2. 설계 원칙
 
@@ -37,11 +37,15 @@ Root agent는 최초 전파와 최종 통합 노드다. 시작할 때 여러 문
 
 Agent를 여러 mode로 자동 전환하는 복잡한 장치를 두지 않는다. 비-LLM 코드가 상태 변경이 있었던 Codex 턴을 세고, 짧은 주기로 memory maintenance를, 더 긴 주기로 independent review를 알린다.
 
+### 큰 투자 전에만 전략 점검
+
+잘못된 방향의 재작업 비용이 큰 구현은 가벼운 Planner Skill로 먼저 점검한다. Planner는 상주 agent나 새 orchestration 단계가 아니라 main Codex가 잠시 사용하는 task-scoped 절차다. 작은 변경의 steady-state overhead는 늘리지 않는다.
+
 ### 단일 운영 프레임
 
 ```text
 Continuity
-goal + current + active state + memory + cadence + drift review
+goal + current + active state + memory + task planning + cadence + periodic review
 ```
 
 운영 레벨은 하나다. 이전 architecture extension은 역사적 archive로만 보존하며, 문제가 생겨도 자동으로 활성화하거나 승격하지 않는다.
@@ -67,7 +71,8 @@ repo/
 │   ├── initialize-project-continuity/
 │   │   ├── SKILL.md
 │   │   └── agents/openai.yaml
-│   └── maintain-project-memory/SKILL.md
+│   ├── maintain-project-memory/SKILL.md
+│   └── plan-substantial-work/SKILL.md
 ├── .codex/
 │   ├── hooks.json
 │   └── agents/drift-reviewer.toml
@@ -86,14 +91,15 @@ Root `AGENTS.md`는 모든 에이전트의 상세 판단을 담는 문서가 아
 1. 사용자가 소유한 장기 기준을 읽는다.
 2. 현재 primary task와 다음 행동을 찾는다.
 3. 관련 memory만 선택한다.
-4. 최소한의 coherent action을 정의한다.
-5. 구현 또는 조사를 수행하고 근거를 만든다.
-6. 현재 snapshot과 memory candidate를 갱신한다.
-7. due 신호가 있을 때만 maintenance나 review를 실행한다.
+4. 방향 선택의 재작업 비용이 크면 Planner Skill로 접근을 짧게 점검한다.
+5. 최소한의 coherent action을 정의한다.
+6. 구현 또는 조사를 수행하고 근거를 만든다.
+7. 현재 snapshot과 memory candidate를 갱신한다.
+8. due 신호가 있을 때만 maintenance나 review를 실행한다.
 
 Root에는 새 코드를 만들 때 cohesive module, 명시적 input/output, 가정적 layer 금지라는 최소 원칙만 둔다. 별도의 Coder agent를 기본 실행 경로에 넣지 않는다.
 
-Root가 ordinary implementation과 investigation을 직접 수행한다. 별도 agent는 장기 cadence가 요구하는 fresh read-only drift reviewer 하나만 기본 경로에 있으며, reviewer는 다른 agent를 만들지 않는다.
+Root가 ordinary implementation과 investigation을 직접 수행한다. Planner도 별도 agent가 아니라 같은 root가 필요할 때 load하는 Skill이다. 별도 agent는 장기 cadence가 요구하는 fresh read-only drift reviewer 하나만 기본 경로에 있으며, reviewer는 다른 agent를 만들지 않는다.
 
 ### 기존 AGENTS.md와 병합
 
@@ -185,7 +191,43 @@ Verification
 
 여러 작업이 있어도 시작 노드는 `CURRENT.md` 한 개다. Primary task 하나를 명시하고 나머지는 링크만 둔다.
 
-## 8. 범용 durable memory
+## 8. 큰 작업 전 Planner Skill
+
+`$plan-substantial-work`는 다음처럼 잘못된 방향의 비용이 큰 경우 main Codex가 구현 전에 사용한다.
+
+- 큰 feature 또는 여러 module·interface의 동시 변경
+- 중요한 refactor, migration, data model·contract 변경
+- 새 dependency나 service 도입
+- 구현 방향이 분명하지 않거나 작은 개선이 goal-level 결과로 이어지지 않는 경우
+
+고정된 파일 수, line 수, 예상 시간으로 판정하지 않는다. 핵심 기준은 **현재 접근이 틀렸을 때 작은 local patch보다 의미 있는 재작업이 생기는가**다. 명백한 local bug, 기계적 rename, 작은 문서 변경, 이미 검증된 방향의 단순 후속 작업에는 사용하지 않는다.
+
+Planner가 읽는 범위는 user request, `GOAL`, `CURRENT`, primary active state, relevant memory와 이 task의 방향을 정하는 데 필요한 code·interface·evidence다. 전체 repository architecture는 기본 조사 범위가 아니다.
+
+Planner는 실제 outcome과 근본 bottleneck을 분리하고 다음 질문을 적용한다.
+
+- 현재 구현은 root problem인가 symptom인가?
+- 제거, 단순화, existing capability 재사용으로 incremental work 자체를 줄일 수 있는가?
+- 기존 구현 때문에 유지되는 assumption은 무엇인가?
+- original goal에서 sunk cost 없이 다시 시작해도 같은 접근을 선택할 것인가?
+- material alternative의 leverage가 switching cost, risk, complexity를 넘는가?
+
+Novelty나 rewrite는 목표가 아니다. 현재 방향 유지도 완전한 결론이며, 불확실성이 비싼 경우에는 장문 spec 대신 두 방향을 가르는 작은 spike를 선택한다.
+
+결과는 별도 `PLAN.md`에 저장하지 않는다. Primary active state의 `Decisions and Rationale` 아래 다음 정도만 남긴다.
+
+```text
+Strategy Checkpoint — date
+Goal and bottleneck
+Chosen approach
+Material alternative considered
+Why this direction
+Reconsider when
+```
+
+`Next Action`을 가장 작은 implementation 또는 validation step으로 갱신하고 같은 root가 ordinary execution을 재개한다. Planner는 durable memory를 직접 만들거나 cadence를 변경하거나 agent를 생성하지 않는다.
+
+## 9. 범용 durable memory
 
 Memory는 연구 ledger로 고정하지 않는다. 다음 여섯 유형이 공통 형식으로 공존한다.
 
@@ -209,7 +251,7 @@ Status는 `active`, `disputed`, `superseded`, `archived`다. 충돌하는 근거
 
 `memory/INDEX.md`는 script가 생성하며 archived record를 제외한다. ID, type, scope, status, load trigger, summary만 보여 주므로 agent가 필요한 원문만 선택할 수 있다.
 
-## 9. Memory maintenance Skill
+## 10. Memory maintenance Skill
 
 진행 중 발견은 우선 active state의 `Memory Candidates`에 둔다. `$maintain-project-memory`는 다음 조건 중 하나일 때 사용한다.
 
@@ -227,7 +269,7 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 이 명령은 index를 다시 만들고 record를 검증하며 memory counter를 초기화하고 review counter를 한 단계 올린다.
 
-## 10. 비-LLM cadence
+## 11. 비-LLM cadence
 
 `scripts/continuity`는 Python 3.10+ 표준 라이브러리만 사용한다. 기본 설정은 다음과 같다.
 
@@ -250,19 +292,33 @@ Skill은 candidate를 durable memory로 승격할지 선별하고, 중복·충�
 
 시간 기반 scheduled task는 repository가 닫힌 동안에도 실행할 필요가 있는 외부 운영에는 적합하지만, 여기서는 실제 작업량과 분리된다. 따라서 기본 cadence는 달력 시간이 아니라 changed turn 수를 사용한다.
 
-## 11. Fresh independent review
+## 12. Fresh independent review
 
 기본적으로 memory maintenance 5회마다 drift review가 due가 된다. Review는 상주 process가 아니라 root가 그 시점에 fresh `drift_reviewer` subagent를 한 번 만들고 보고를 회수하는 작업이다.
 
-가능하면 reviewer에게 구현 대화의 결론을 길게 전달하지 않는다. 대신 다음 원자료와 질문을 전달한다.
+가능하면 reviewer에게 구현 대화의 결론을 길게 전달하지 않는다. 대신 다음 원자료를 전달한다.
 
 - 최초 사용자 outcome과 `GOAL.md`
 - `CURRENT.md`와 관련 active state
 - 관련 memory records
+- `state/cadence.json`의 `last_review_commit`
 - primary code, tests, 결과, 로그
-- 목표 대체, 실패 반복, scope growth, stale memory 여부
 
-Reviewer는 read-only이고 child agent를 만들지 않으며 completion counter도 수정하지 않는다. Root가 finding을 검토하고 필요한 state 또는 memory 변경을 적용한 뒤 다음을 실행한다.
+Reviewer는 read-only이고 child agent를 만들지 않으며 completion counter도 수정하지 않는다. 하나의 reviewer 안에서 세 범위를 구분한다.
+
+1. 기존 continuity review: goal 대체, 실패 반복, evidence 없는 scope growth, stale·conflicting memory
+2. Strategic review: 실제 local progress가 낮은 leverage의 해법에 갇혔는지, sunk-cost bias와 잘못된 bottleneck 때문에 제거 가능한 일을 계속 최적화하는지
+3. Repository-wide architecture review: coupling, 깊거나 순환하는 dependency, hub·god module, layer leakage, change blast radius, 책임 중복, accidental abstraction이 누적되는지
+
+Strategic review는 Planner와 같은 no-sunk-cost counterfactual을 사용하지만 scope가 다르다. Planner는 현재 task에 투자하기 전에 묻고, reviewer는 여러 작업이 누적된 방향을 fresh context에서 묻는다. Architecture review도 original goal에서 다시 설계해도 비슷한 구조를 택할지 확인하되, 단순히 불완전하거나 문제 자체가 자연스럽게 복잡한 구조를 finding으로 만들지 않는다.
+
+Repository-wide 검토는 비용을 제한하기 위해 두 단계로 수행한다. 먼저 top-level structure와 manifests, 선언된 boundary, `last_review_commit` 이후 변화, 기존 architecture map이나 dependency report, 눈에 띄는 hotspot을 훑는다. Material signal이 있을 때만 관련 dependency path와 symbols를 깊게 조사한다.
+
+이미 dependency·call graph, impact analysis, symbol relationship, cycle, fan-in/fan-out 같은 structural code intelligence가 있으면 근거로 사용한다. Repository 또는 language-native tooling을 우선하고, routine review를 위해 새 graph system을 설치하거나 hard dependency로 만들지 않는다. 도구가 없으면 manifests, imports, symbols, tests와 targeted search로 대체한다. Metric과 graph는 finding을 결정하는 agent가 아니라 evidence source다.
+
+Finding은 `goal`, `strategy`, `architecture`, `memory` label과 precise evidence, impact, action, confidence를 포함한다. Architecture finding은 correction scope와 transition cost도 설명한다. 대안이 상상된다는 이유만으로 전환을 권하지 않으며 “현재 접근이 적절하므로 계속한다”도 정상 결론이다.
+
+Root가 finding을 검토하고 필요한 state 또는 memory 변경을 적용한 뒤 다음을 실행한다.
 
 ```bash
 ./scripts/continuity review-complete
@@ -270,13 +326,14 @@ Reviewer는 read-only이고 child agent를 만들지 않으며 completion counte
 
 Review 주기는 비용 조절을 위한 기본값일 뿐이다. GOAL 변경 가능성, memory conflict, 반복 실패, 근거 없는 복잡성 증가가 보이면 일찍 실행한다.
 
-## 12. Turn flow와 session 복구
+## 13. Turn flow와 session 복구
 
 ```text
 UserPromptSubmit hook: 누락된 Stop 복구 + due context 주입
   -> Root AGENTS 적용
   -> GOAL + CURRENT + INDEX 읽기
   -> 관련 active state + memory + evidence 읽기
+  -> substantial work이면 Planner Skill로 strategy checkpoint
   -> 최소 coherent work 수행
   -> CURRENT/active snapshot 갱신
   -> due이면 memory Skill 실행
@@ -291,7 +348,7 @@ SessionEnd: thread 종료 시 최종 reconciliation 보조
 
 이는 role을 자동 순환시키는 상태기계가 아니다. Ordinary work는 ordinary work로 남고, script는 유지보수가 필요한 시점을 알리는 역할만 한다.
 
-## 13. Archive 경계
+## 14. Archive 경계
 
 이전의 Level 2 architecture extension은 `codex-repository-framework/archive/`에 frozen, non-operational 상태로 보존한다. 현재 프레임은 다음을 하지 않는다.
 
@@ -300,9 +357,9 @@ SessionEnd: thread 종료 시 최종 reconciliation 보조
 - archive 문서를 일반 작업 context로 load
 - 구조 문제가 생겼다는 이유로 Level 2를 자동 활성화
 
-구조 관련 문제도 먼저 현재 Root가 코드와 범용 memory 안에서 직접 다룬다. 별도 구조 체계가 정말 필요하면 사용자가 새 설계를 명시적으로 결정해야 한다. Archive는 과거 판단을 검토하라는 요청이 있을 때만 참고 자료로 연다.
+구조 관련 문제는 현재 periodic reviewer가 진단하고 Root가 코드와 범용 memory 안에서 직접 다룬다. 이것은 Level 2를 다시 활성화하거나 상주 architecture agent를 추가하는 일이 아니다. 별도 구조 체계가 정말 필요하면 사용자가 새 설계를 명시적으로 결정해야 한다. Archive는 과거 판단을 검토하라는 요청이 있을 때만 참고 자료로 연다.
 
-## 14. 적용과 운영
+## 15. 적용과 운영
 
 새 프로젝트와 기존 프로젝트에 동일한 safe installer를 사용한다.
 
@@ -342,7 +399,7 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 
 `archive/`는 설치 대상에서 제외한다.
 
-## 15. 공식 Codex 구조와의 대응
+## 16. 공식 Codex 구조와의 대응
 
 이 프레임은 별도의 proprietary loader를 만들지 않고 Codex가 제공하는 repository 구조를 사용한다.
 
@@ -351,15 +408,16 @@ Hook은 명령 실행 권한을 가지므로 프로젝트가 `.codex/hooks.json`
 - Custom reviewer role: [subagent configuration](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 - OS별 command와 저비용 turn/session trigger: [`.codex/hooks.json`](https://learn.chatgpt.com/docs/hooks)
 
-활성 custom agent는 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Root `AGENTS.md`에는 호출 조건과 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
+활성 custom agent는 확장된 drift reviewer 하나이며 상세 역할은 전용 `.toml`에 둔다. Planner는 repository Skill이고, Root `AGENTS.md`에는 Planner 호출 조건과 reviewer 통합 책임만 둔다. Hook command는 repository 권한으로 실행되므로 설치 시 검토와 신뢰가 필요하다.
 
-## 16. 핵심 판단
+## 17. 핵심 판단
 
-이 설계에서 값비싼 LLM은 의미 판단이 필요한 세 곳에만 사용된다.
+이 설계에서 값비싼 LLM은 의미 판단이 필요한 네 곳에만 사용된다.
 
 - 프로젝트 도입 시 한 번 수행하는 continuity initialization
+- 재작업 비용이 큰 task의 구현 전 strategy checkpoint
 - 후보를 압축하고 충돌을 다루는 memory maintenance
-- 기존 작업 관성에서 분리된 independent drift review
+- 기존 작업 관성에서 분리된 strategic·architectural independent review
 
 횟수 계산, due 판정, index 생성, schema validation은 단순 코드가 담당한다. 그 결과 자동화 비용을 낮추면서도 memory를 단순 append-only note보다 신뢰할 수 있게 유지한다.
 
