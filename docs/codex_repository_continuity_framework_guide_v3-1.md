@@ -375,9 +375,9 @@ py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project 
 py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project
 ```
 
-Installer는 기존 root instruction의 managed block과 기존 hook JSON만 구조적으로 병합한다. 다른 기존 파일은 덮어쓰지 않는다. Root `AGENTS.override.md`가 활성 상태이면 auto mode가 중단되므로 override의 임시성 여부를 먼저 결정한다.
+Installer는 기존 root instruction의 managed block과 기존 hook JSON의 continuity 구간을 병합한다. AF 소유 공통 Skill 3개와 설정, drift reviewer, runtime/launcher, active·memory의 `_template.md`는 명시적 관리 목록에 따라 업데이트한다. 프로젝트 소유 GOAL, CURRENT, cadence, memory index·records, active 작업, 별도 Skill은 보존하고 없는 초기 파일만 만든다. 프로젝트별 절차는 AF Skill을 수정하지 않고 별도 Skill에 둔다. Root `AGENTS.override.md`가 활성 상태이면 auto mode가 중단되므로 override의 임시성 여부를 먼저 결정한다.
 
-기존 continuity runtime이 현재 turn hook API와 호환되지 않거나 managed launcher 경로와 충돌하면 새 hook만 설치해 자동화를 깨뜨리지 않고 중단한다. 사용자 변경을 검토한 뒤 명시적으로 `--replace-runtime`을 지정해야 교체한다. Hook 정의가 변경되면 `/hooks`에서 새 hash를 다시 검토하고 신뢰한다.
+업데이트는 최초 설치와 같은 명령이며 AF 소유 파일은 자동 교체한다. `--replace-runtime`은 이전 호출 호환용이다. 성공한 설치의 마지막 쓰기로 `state/af-install.json`에 source URL, revision, source_dirty, installed_at, 관리 파일·구간 목록을 기록한다. PTY는 revision을 최신 AF 소스 HEAD와 비교할 수 있다. 같은 revision이고 source_dirty=false이면 해당 소스 설치로 판단하며, 기록 없음·revision=null·dirty=true/null은 확인되지 않은 설치다. 이 기록은 사후 파일 변경을 감시하지 않으며 Git metadata 없는 배포의 revision은 null이다. Installer는 네트워크 조회나 자동 주기 업데이트를 하지 않는다. Dry-run은 기록하지 않고 동일 설치 재실행은 시각을 유지한다. 중간 실패 시 새 리비전을 기록하지 않지만 일부 파일은 갱신됐을 수 있으므로 재실행한다. 관리 목록에서 빠진 파일의 자동 삭제는 하지 않는다. Hook 정의가 변경되면 `/hooks`에서 새 hash를 다시 검토하고 신뢰한다.
 
 설치 직후 새 Codex 세션에서 다음을 한 번 실행한다.
 

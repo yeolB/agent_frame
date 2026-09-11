@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,35 @@ MANAGED_RUNTIME_PATHS = {
     "scripts/continuity-posix",
     "scripts/continuity-windows.ps1",
 }
+MANAGED_FILE_PATHS = MANAGED_RUNTIME_PATHS | {
+    ".codex/agents/drift-reviewer.toml",
+    ".agents/skills/initialize-project-continuity/SKILL.md",
+    ".agents/skills/initialize-project-continuity/agents/openai.yaml",
+    ".agents/skills/maintain-project-memory/SKILL.md",
+    ".agents/skills/plan-substantial-work/SKILL.md",
+    "state/active/_template.md",
+    "memory/records/_template.md",
+}
+INSTALL_RECORD = "state/af-install.json"
+
+
+def source_identity() -> dict[str, Any]:
+    """A dirty or unversioned checkout must never claim a clean installed revision."""
+    def git(*args: str) -> str | None:
+        result = subprocess.run(
+            ["git", "-C", str(FRAMEWORK_ROOT), *args],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    revision = git("rev-parse", "HEAD")
+    status = git("status", "--porcelain", "--untracked-files=all", "--", ".")
+    return {
+        "schema_version": 1,
+        "source": "https://github.com/yeolB/agent_frame",
+        "revision": revision,
+        "source_dirty": bool(status) if status is not None else None,
+    }
 
 
 class InstallError(RuntimeError):
@@ -227,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replace-runtime",
         action="store_true",
-        help="Replace incompatible existing continuity runtime files after reviewing local changes",
+        help="Compatibility flag; AF-owned files are now always updated",
     )
     return parser
 
@@ -282,16 +312,11 @@ def main() -> int:
         destination = target / relative
         if destination.exists():
             if destination.read_bytes() != source.read_bytes():
-                if relative.as_posix() in MANAGED_RUNTIME_PATHS and args.replace_runtime:
+                if relative.as_posix() in MANAGED_FILE_PATHS:
                     planned[destination] = source.read_bytes()
-                    modes[destination] = destination.stat().st_mode & 0o777
-                    actions[destination] = "replace managed runtime"
+                    modes[destination] = source.stat().st_mode & 0o777
+                    actions[destination] = "update AF-owned file"
                     continue
-                if relative.as_posix() in MANAGED_RUNTIME_PATHS - {"scripts/continuity"}:
-                    raise InstallError(
-                        f"Existing {relative.as_posix()} conflicts with the managed hook launcher. "
-                        "Review local changes, then rerun with --replace-runtime."
-                    )
                 preserved.append(destination)
             continue
         planned[destination] = source.read_bytes()
@@ -304,8 +329,7 @@ def main() -> int:
         effective_runtime = target_runtime.read_bytes()
     if effective_runtime is not None and not runtime_supports_current_hooks(effective_runtime):
         raise InstallError(
-            "Existing scripts/continuity is incompatible with current hooks. Review local changes, then "
-            "rerun with --replace-runtime to upgrade it."
+            "Source scripts/continuity is incompatible with current hooks."
         )
 
     for path in list(planned):
@@ -329,13 +353,39 @@ def main() -> int:
     for path, action in sorted(actions.items(), key=lambda item: str(item[0])):
         print(f"{action}: {path.relative_to(target)}")
     for path in preserved:
-        print(f"preserve existing, review manually: {path.relative_to(target)}")
+        print(f"preserve project data: {path.relative_to(target)}")
+    record_path = target / INSTALL_RECORD
+    record = {
+        **source_identity(),
+        "instruction_file": instruction_name,
+        "managed_files": sorted(MANAGED_FILE_PATHS),
+        "managed_sections": {
+            instruction_name: "CODEX CONTINUITY marker block",
+            ".codex/hooks.json": "continuity hook groups",
+        },
+    }
+    try:
+        previous = json.loads(record_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        previous = {}
+    update_record = bool(planned) or not isinstance(previous, dict) or any(
+        previous.get(key) != value for key, value in record.items()
+    )
+    if update_record:
+        print(f"record installation: {INSTALL_RECORD} (revision={record['revision']}, dirty={record['source_dirty']})")
+    for path in [*planned, record_path]:
+        if any(part.is_symlink() for part in [path, *path.parents] if part != target and target in part.parents):
+            raise InstallError(f"Refusing to write through a symlink: {path.relative_to(target)}")
     if args.dry_run:
         print("Dry run; no files written.")
         return 0
 
     for path, content in planned.items():
         atomic_write(path, content, modes[path])
+    # Last write: a failed update must not advertise the new revision as installed.
+    if update_record:
+        record["installed_at"] = datetime.now(timezone.utc).isoformat()
+        atomic_write(record_path, (json.dumps(record, indent=2) + "\n").encode("utf-8"), 0o644)
     print("Continuity integration complete. Existing non-managed content was preserved.")
     return 0
 

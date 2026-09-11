@@ -6,7 +6,7 @@
 
 ## 빠른 적용
 
-새 프로젝트와 기존 프로젝트 모두 non-destructive installer를 사용합니다. 기존 root `AGENTS.md`에는 marker로 구분된 continuity block만 병합하고, 다른 내용은 보존합니다.
+새 프로젝트와 기존 프로젝트 모두 같은 installer를 사용합니다. AF 소유 Skill·reviewer·runtime·템플릿은 업데이트하고 프로젝트 상태와 메모리는 보존합니다. 기존 root `AGENTS.md`에는 marker로 구분된 continuity block만 병합합니다. 설치 리비전은 `state/af-install.json`에 기록합니다.
 
 ```bash
 ./codex-repository-framework/install-continuity /path/to/target-project --dry-run

@@ -19,7 +19,9 @@ Installer의 동작은 다음과 같습니다.
 - Root instruction이 없으면 canonical `AGENTS.md`를 만듭니다.
 - 기존 `AGENTS.md`가 있으면 `BEGIN/END CODEX CONTINUITY` marker 사이의 작은 block만 추가하거나 갱신합니다.
 - 기존 `.codex/hooks.json`은 다른 hook을 보존하면서 continuity hook만 병합합니다.
-- 그 밖의 기존 파일은 덮어쓰지 않고 manual review 대상으로 출력합니다. 현재 hook API와 호환되지 않거나 launcher와 충돌하는 continuity runtime 파일은 설치를 중단하며, 검토 후 `--replace-runtime`으로만 교체합니다.
+- AF 소유 파일(공통 Skill 3개와 설정, drift reviewer, runtime/launcher, active·memory의 `_template.md`)은 명시적 관리 목록에 따라 교체합니다. 프로젝트별 절차는 별도 이름의 Skill에 작성합니다.
+- 프로젝트 소유 `GOAL.md`, `CURRENT.md`, cadence, memory index·records, active 작업 및 별도 Skill은 보존합니다. 없는 초기 파일만 생성합니다.
+- 모든 쓰기가 성공한 뒤 `state/af-install.json`에 소스 Git 리비전, 수정 여부, 설치 시각, 관리 파일·구간 목록을 기록합니다.
 - 쓰기 전에 project instruction chain의 byte 크기를 검사합니다.
 
 Root에 `AGENTS.override.md`가 있으면 같은 위치의 `AGENTS.md`를 가리므로 auto mode는 중단합니다. 임시 override를 제거하거나, 내용을 검토한 후 다음처럼 적용 대상을 명시합니다.
@@ -102,11 +104,11 @@ py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project 
 py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project
 ```
 
-Git, PowerShell 또는 호환 Python이 없으면 installer가 쓰기 전에 중단합니다. 기존 설치의 runtime이 현재 hook command와 호환되지 않거나 launcher 경로와 충돌하는 경우에는 사용자 수정을 먼저 검토한 뒤에만 다음을 사용합니다.
+Git, PowerShell 또는 호환 Python이 없으면 installer가 쓰기 전에 중단합니다. 업데이트도 최초 설치와 같은 명령을 사용합니다. AF 소유 파일은 자동 교체하며 `--replace-runtime`은 기존 호출 호환용으로만 남아 있습니다.
 
-```powershell
-py -3 .\codex-repository-framework\install-continuity C:\path\to\target-project --replace-runtime
-```
+PTY는 `state/af-install.json`의 `revision`을 최신 AF 소스 Git HEAD와 비교하면 됩니다. 같고 `source_dirty`가 `false`이면 해당 소스 리비전으로 설치된 상태입니다. 리비전이 다르면 업데이트 후보이며, 기록이 없거나 revision이 null이거나 dirty가 true/null이면 확인되지 않은 설치로 취급합니다. 이 기록은 로컬 AF 파일의 사후 변경까지 감시하는 무결성 검사는 아닙니다. Git metadata 없는 배포도 설치되지만 리비전은 null입니다. Installer 자체는 네트워크 조회나 주기 업데이트를 수행하지 않습니다.
+
+`--dry-run`은 기록도 쓰지 않습니다. 동일 설치의 재실행은 설치 시각을 바꾸지 않습니다. 실패 시 새 리비전을 기록하지 않으며, 파일별 쓰기이므로 중간 실패는 일부 파일만 갱신된 상태일 수 있습니다. 같은 설치 명령을 다시 실행해 완료합니다. 관리 목록에서 사라진 파일을 자동 삭제하지는 않습니다.
 
 Hook 정의가 새로 설치되거나 바뀌면 `/hooks`에서 내용을 검토하고 다시 신뢰해야 합니다.
 
